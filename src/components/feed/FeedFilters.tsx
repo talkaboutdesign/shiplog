@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select } from "@/components/ui/select";
 import type { GitHubEventType } from "../../../convex/types";
 import type { Repository } from "../../../convex/types";
@@ -54,7 +53,7 @@ export function FeedFilters({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-wrap items-center gap-3">
       <Tabs value={filters.eventType} onValueChange={handleEventTypeChange}>
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
@@ -63,50 +62,45 @@ export function FeedFilters({
         </TabsList>
       </Tabs>
 
-      <div className="flex gap-4">
-        {repositories.length > 1 && (
-          <div className="flex-1">
-            <Select
-              value={filters.repositoryId || "all"}
-              onChange={(e) => handleRepositoryChange(e.target.value)}
-            >
-              <option value="all">All repositories</option>
-              {repositories.map((repo) => (
-                <option key={repo._id} value={repo._id}>
-                  {repo.fullName}
-                </option>
-              ))}
-            </Select>
-          </div>
-        )}
+      {repositories.length > 1 && (
+        <Select
+          value={filters.repositoryId || "all"}
+          onChange={(e) => handleRepositoryChange(e.target.value)}
+          className="w-auto"
+        >
+          <option value="all">All repositories</option>
+          {repositories.map((repo) => (
+            <option key={repo._id} value={repo._id}>
+              {repo.fullName}
+            </option>
+          ))}
+        </Select>
+      )}
 
-        {contributors.length > 0 && (
-          <div className="flex-1">
-            <Select
-              value={filters.contributor || ""}
-              onChange={(e) => handleContributorChange(e.target.value)}
-            >
-              <option value="">All contributors</option>
-              {contributors.map((contributor) => (
-                <option key={contributor} value={contributor}>
-                  {contributor}
-                </option>
-              ))}
-            </Select>
-          </div>
-        )}
+      {contributors.length > 0 && (
+        <Select
+          value={filters.contributor || ""}
+          onChange={(e) => handleContributorChange(e.target.value)}
+          className="w-auto"
+        >
+          <option value="">All contributors</option>
+          {contributors.map((contributor) => (
+            <option key={contributor} value={contributor}>
+              {contributor}
+            </option>
+          ))}
+        </Select>
+      )}
 
-        <div className="flex-1">
-          <Select
-            value={filters.timeRange}
-            onChange={(e) => handleTimeRangeChange(e.target.value)}
-          >
-            <option value="24h">Last 24 hours</option>
-            <option value="7d">Last 7 days</option>
-            <option value="all">All time</option>
-          </Select>
-        </div>
-      </div>
+      <Select
+        value={filters.timeRange}
+        onChange={(e) => handleTimeRangeChange(e.target.value)}
+        className="w-auto"
+      >
+        <option value="24h">Last 24 hours</option>
+        <option value="7d">Last 7 days</option>
+        <option value="all">All time</option>
+      </Select>
     </div>
   );
 }

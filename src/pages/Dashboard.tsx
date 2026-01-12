@@ -2,7 +2,6 @@ import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InstallButton } from "@/components/github/InstallButton";
-import { RepoCard } from "@/components/github/RepoCard";
 import { FeedFilters, type FeedFilters as FeedFiltersType } from "@/components/feed/FeedFilters";
 import { ApiKeyDrawer } from "@/components/settings/ApiKeyDrawer";
 import { SyncedReposDropdown } from "@/components/github/SyncedReposDropdown";
@@ -69,8 +68,17 @@ export function Dashboard() {
 
   const hasRepos = activeRepos.length > 0;
 
+  const headerActions = hasRepos ? (
+    <>
+      <SyncedReposDropdown />
+      <ApiKeyDrawer>
+        <Button variant="outline" size="sm">Settings</Button>
+      </ApiKeyDrawer>
+    </>
+  ) : null;
+
   return (
-    <AppShell>
+    <AppShell headerActions={headerActions}>
       <div className="container mx-auto max-w-4xl space-y-6">
         {!hasRepos ? (
           <Card>
@@ -90,29 +98,6 @@ export function Dashboard() {
           </Card>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1">
-                {activeRepos.length === 1 ? (
-                  <RepoCard repository={activeRepos[0]} />
-                ) : (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Synced repositories</CardTitle>
-                      <CardDescription>
-                        {activeRepos.length} {activeRepos.length === 1 ? "repository" : "repositories"} synced
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <SyncedReposDropdown />
-                <ApiKeyDrawer>
-                  <Button variant="outline">Settings</Button>
-                </ApiKeyDrawer>
-              </div>
-            </div>
-
             {!hasApiKey && (
               <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
                 <CardHeader>

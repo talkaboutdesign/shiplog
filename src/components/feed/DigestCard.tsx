@@ -65,13 +65,12 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
                 </Badge>
               )}
             </div>
-            {/* Show skeleton for perspectives while loading, or show real badges when available */}
+            {/* Show animated analyzing badge while loading, or show real badges when available */}
             {isProcessing && perspectives === undefined ? (
-              <div className="flex gap-2 flex-wrap">
-                <Skeleton className="h-5 w-20 rounded-full" />
-                <Skeleton className="h-5 w-24 rounded-full" />
-                <Skeleton className="h-5 w-16 rounded-full" />
-              </div>
+              <Badge variant="outline" className="animate-pulse border-muted-foreground/30 text-muted-foreground">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+                Analyzing tags
+              </Badge>
             ) : perspectives && perspectives.length > 0 ? (
               <PerspectiveBadges perspectives={perspectives} />
             ) : null}

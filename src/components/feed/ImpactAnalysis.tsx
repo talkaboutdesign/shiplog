@@ -33,26 +33,53 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
     return null;
   }
 
-  // If processing but no impactAnalysis yet, show full skeleton structure
+  // If processing but no impactAnalysis yet, show header immediately with analyzing state
   if (!impactAnalysis && isProcessing) {
     return (
-      <div className="border-t pt-4 mt-4 space-y-3">
-        <Skeleton className="h-4 w-48" /> {/* Index Status skeleton */}
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-6 w-48" /> {/* "AI-Detected Impact" header */}
-          <Skeleton className="h-6 w-24" /> {/* Risk badge */}
+      <div className="border-t pt-4 mt-4 space-y-4">
+        {/* Index Status skeleton */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-48" />
         </div>
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <div className="space-y-2 mt-3">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-5/6" />
+
+        {/* AI-Detected Impact - show header immediately */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-600">⚠</span>
+              <h4 className="text-sm font-semibold">AI-Detected Impact</h4>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+                analyzing risk
+              </Badge>
+              <span className="text-xs text-muted-foreground animate-pulse">
+                calculating...
+              </span>
+            </div>
+          </div>
         </div>
-        <Skeleton className="h-5 w-32" /> {/* Changed Files header */}
-        <div className="space-y-1">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-        </div>
+
+        {/* Changed Files - show immediately if available (from commit data, not AI) */}
+        {event?.fileDiffs && event.fileDiffs.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <span>Changed Files ({event.fileDiffs.length})</span>
+            </div>
+            <div className="space-y-1">
+              {event.fileDiffs.map((file, index) => (
+                <div
+                  key={index}
+                  className="text-sm text-muted-foreground font-mono truncate"
+                >
+                  {file.filename}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -198,16 +225,8 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
         )}
       </div>
 
-      {/* Changed Files */}
-      {event?.fileDiffs === undefined && isProcessing ? (
-        <div className="space-y-2">
-          <Skeleton className="h-5 w-32" /> {/* "Changed Files" header skeleton */}
-          <div className="space-y-1">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-          </div>
-        </div>
-      ) : event?.fileDiffs && event.fileDiffs.length > 0 ? (
+      {/* Changed Files - always show when available (from commit data, not AI) */}
+      {event?.fileDiffs && event.fileDiffs.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <span>Changed Files ({event.fileDiffs.length})</span>
@@ -223,7 +242,7 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
             ))}
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

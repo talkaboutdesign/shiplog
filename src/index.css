@@ -54,3 +54,15 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom animation for pulsing dot indicator */
+@keyframes dot-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
