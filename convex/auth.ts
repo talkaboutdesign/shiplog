@@ -1,12 +1,13 @@
-import { QueryCtx, MutationCtx, ActionCtx } from "./_generated/server";
+import { QueryCtx, MutationCtx } from "./_generated/server";
 import { Id, Doc } from "./_generated/dataModel";
 
 /**
  * Get the current authenticated user from the context.
  * Throws an error if the user is not authenticated or not found.
+ * Note: For actions, use ctx.runQuery(api.users.getCurrent) instead.
  */
 export async function getCurrentUser(
-  ctx: QueryCtx | MutationCtx | ActionCtx
+  ctx: QueryCtx | MutationCtx
 ) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
