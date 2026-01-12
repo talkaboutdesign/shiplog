@@ -208,12 +208,30 @@ http.route({
 
       // Determine occurredAt timestamp
       let occurredAt = Date.now();
-      if (payload.repository?.updated_at) {
-        occurredAt = new Date(payload.repository.updated_at).getTime();
-      } else if (payload.pull_request?.updated_at) {
-        occurredAt = new Date(payload.pull_request.updated_at).getTime();
-      } else if (payload.issue?.updated_at) {
-        occurredAt = new Date(payload.issue.updated_at).getTime();
+      if (eventType === "push") {
+        // For push events, use the head commit timestamp or first commit timestamp
+        if (payload.head_commit?.timestamp) {
+          occurredAt = new Date(payload.head_commit.timestamp).getTime();
+        } else if (payload.commits?.[0]?.timestamp) {
+          occurredAt = new Date(payload.commits[0].timestamp).getTime();
+        } else {
+          // Fallback to current time if no commit timestamp available
+          occurredAt = Date.now();
+        }
+      } else if (eventType === "pull_request") {
+        // For PR events, use the PR updated_at or created_at
+        if (payload.pull_request?.updated_at) {
+          occurredAt = new Date(payload.pull_request.updated_at).getTime();
+        } else if (payload.pull_request?.created_at) {
+          occurredAt = new Date(payload.pull_request.created_at).getTime();
+        }
+      } else if (eventType === "issues") {
+        // For issue events, use the issue updated_at or created_at
+        if (payload.issue?.updated_at) {
+          occurredAt = new Date(payload.issue.updated_at).getTime();
+        } else if (payload.issue?.created_at) {
+          occurredAt = new Date(payload.issue.created_at).getTime();
+        }
       }
 
       // Store event

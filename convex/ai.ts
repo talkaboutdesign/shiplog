@@ -35,10 +35,12 @@ const ImpactAnalysisSchema = z.object({
       impactType: z.enum(["modified", "added", "deleted"]),
       riskLevel: z.enum(["low", "medium", "high"]),
       confidence: z.number().min(0).max(100),
+      explanation: z.string().describe("1-2 sentence explanation of why this surface has this risk level and what the confidence score means"),
     })
   ),
   overallRisk: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(100),
+  overallExplanation: z.string().describe("Brief explanation of the overall risk assessment and what the confidence score indicates"),
 });
 
 const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub activity into clear, concise summaries for non-technical stakeholders.
@@ -322,7 +324,13 @@ ${fileDiffs.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.dele
 Known code surfaces:
 ${surfaces.map((s) => `- ${s.name} (${s.surfaceType}): ${s.filePath}`).join("\n")}
 
-Determine which surfaces are affected, the impact type (modified/added/deleted), risk level (low/medium/high), and your confidence (0-100).`;
+For each affected surface, determine:
+1. Impact type (modified/added/deleted)
+2. Risk level (low/medium/high) - consider: is this a core component? Does it have many dependencies? Is it user-facing?
+3. Confidence (0-100) - how certain you are about the risk assessment
+4. Explanation - explain WHY this risk level was assigned and what the confidence means (e.g., "High risk because this component is used across multiple features" or "Medium confidence because the changes are minor but the component is critical")
+
+Also provide an overall risk assessment and explanation for the entire change set.`;
 
             const { object: impact } = await generateObject({
               model,
@@ -343,6 +351,7 @@ Determine which surfaces are affected, the impact type (modified/added/deleted),
                   impactType: af.impactType,
                   riskLevel: af.riskLevel,
                   confidence: af.confidence,
+                  explanation: af.explanation,
                 };
               })
               .filter((af): af is NonNullable<typeof af> => af !== null);
@@ -352,6 +361,7 @@ Determine which surfaces are affected, the impact type (modified/added/deleted),
                 affectedSurfaces,
                 overallRisk: impact.overallRisk,
                 confidence: impact.confidence,
+                overallExplanation: impact.overallExplanation,
               };
             }
           }

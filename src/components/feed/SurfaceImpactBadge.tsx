@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface SurfaceImpactBadgeProps {
   surfaceName: string;
@@ -7,6 +9,7 @@ interface SurfaceImpactBadgeProps {
   impactType: "modified" | "added" | "deleted";
   riskLevel: "low" | "medium" | "high";
   confidence: number;
+  explanation?: string;
 }
 
 const surfaceTypeColors: Record<
@@ -28,12 +31,6 @@ const riskColors = {
   high: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
 };
 
-const riskIcons = {
-  low: "✓",
-  medium: "ℹ",
-  high: "⚠",
-};
-
 export function SurfaceImpactBadge({
   surfaceName,
   filePath,
@@ -41,12 +38,13 @@ export function SurfaceImpactBadge({
   impactType,
   riskLevel,
   confidence,
+  explanation,
 }: SurfaceImpactBadgeProps) {
-  const icon = riskIcons[riskLevel];
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <div className="p-3 rounded-md border bg-card space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {surfaceType && (
           <Badge
             variant="outline"
@@ -67,11 +65,28 @@ export function SurfaceImpactBadge({
           {filePath}
         </div>
       )}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="capitalize">{impactType}</span>
-        <span>•</span>
-        <span>Confidence: {confidence}%</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="capitalize">{impactType}</span>
+          <span>•</span>
+          <span>Confidence: {confidence}%</span>
+        </div>
+        {explanation && (
+          <Button
+            variant="ghost"
+            className="h-auto p-0 text-xs"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? "Hide details" : "Show details"}
+          </Button>
+        )}
       </div>
+      {isExpanded && explanation && (
+        <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md mt-2">
+          <p className="font-medium mb-1">Why {riskLevel} risk?</p>
+          <p>{explanation}</p>
+        </div>
+      )}
     </div>
   );
 }

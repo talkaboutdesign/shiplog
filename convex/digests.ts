@@ -51,6 +51,7 @@ export const create = internalMutation({
               v.literal("high")
             ),
             confidence: v.number(),
+            explanation: v.string(),
           })
         ),
         overallRisk: v.union(
@@ -59,6 +60,7 @@ export const create = internalMutation({
           v.literal("high")
         ),
         confidence: v.number(),
+        overallExplanation: v.optional(v.string()),
       })
     ),
   },

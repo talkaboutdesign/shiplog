@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { SurfaceImpactBadge } from "./SurfaceImpactBadge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { Digest } from "../../../convex/types";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -19,6 +21,7 @@ interface ImpactAnalysisProps {
 }
 
 export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAnalysisProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const indexStatus = useQuery(api.surfaces.getRepositoryIndexStatus, {
     repositoryId,
   });
@@ -72,9 +75,13 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAn
         </div>
       )}
 
-      {/* AI-Detected Impact Header */}
+      {/* AI-Detected Impact - Collapsible */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <Button
+          variant="ghost"
+          className="w-full justify-between p-0 h-auto font-normal hover:bg-transparent"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
           <div className="flex items-center gap-2">
             <span className="text-yellow-600">⚠</span>
             <h4 className="text-sm font-semibold">AI-Detected Impact</h4>
@@ -89,29 +96,46 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAn
             <span className="text-xs text-muted-foreground">
               {impactAnalysis.confidence}% confidence
             </span>
+            <span className="text-muted-foreground ml-2">
+              {isExpanded ? "▲" : "▼"}
+            </span>
           </div>
-        </div>
+        </Button>
+
+        {/* Overall Explanation */}
+        {isExpanded && impactAnalysis.overallExplanation && (
+          <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+            <p className="font-medium mb-1">Overall Assessment:</p>
+            <p>{impactAnalysis.overallExplanation}</p>
+            <p className="mt-2 text-xs">
+              <strong>Confidence Score:</strong> This indicates how certain the AI is about the risk assessment. Higher confidence means the analysis is more reliable based on the code structure and changes detected.
+            </p>
+          </div>
+        )}
 
         {/* Affected Surfaces */}
-        <div className="space-y-2">
-          {impactAnalysis.affectedSurfaces.map((surface, index) => {
-            const surfaceDetails = surface.surfaceId
-              ? surfaceMap.get(surface.surfaceId)
-              : null;
+        {isExpanded && (
+          <div className="space-y-2">
+            {impactAnalysis.affectedSurfaces.map((surface, index) => {
+              const surfaceDetails = surface.surfaceId
+                ? surfaceMap.get(surface.surfaceId)
+                : null;
 
-            return (
-              <SurfaceImpactBadge
-                key={index}
-                surfaceName={surface.surfaceName}
-                filePath={surfaceDetails?.filePath}
-                surfaceType={surfaceDetails?.surfaceType}
-                impactType={surface.impactType}
-                riskLevel={surface.riskLevel}
-                confidence={surface.confidence}
-              />
-            );
-          })}
-        </div>
+              return (
+                <SurfaceImpactBadge
+                  key={index}
+                  surfaceName={surface.surfaceName}
+                  filePath={surfaceDetails?.filePath}
+                  surfaceType={surfaceDetails?.surfaceType}
+                  impactType={surface.impactType}
+                  riskLevel={surface.riskLevel}
+                  confidence={surface.confidence}
+                  explanation={surface.explanation}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Changed Files */}
