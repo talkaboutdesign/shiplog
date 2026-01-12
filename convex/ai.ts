@@ -36,12 +36,12 @@ const ImpactAnalysisSchema = z.object({
       impactType: z.enum(["modified", "added", "deleted"]),
       riskLevel: z.enum(["low", "medium", "high"]),
       confidence: z.number().min(0).max(100),
-      explanation: z.string().describe("1-2 sentence concise explanation of why this surface has this risk level. Do not explain what the confidence score means - the score is already displayed separately."),
+      explanation: z.string().describe("Brief note like a senior engineer would write. Flag specific issues, bugs, or suspicious patterns you see in the code changes. Be direct and actionable. If nothing looks off, explain why the risk level. Do NOT explain confidence scores - they're displayed separately."),
     })
   ),
   overallRisk: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(100),
-  overallExplanation: z.string().describe("Brief, concise explanation of the overall risk assessment. Be direct and straight to the point. Do NOT start with 'Overall Assessment:' or mention the risk level (it's already shown in the tag). Do NOT explain what the confidence score indicates - the score is already displayed separately."),
+  overallExplanation: z.string().describe("Write like notes to a senior engineer reviewing this change. Flag any bugs, potential issues, or things that look off. Be specific about what you see in the code. If nothing concerning, note why. Be concise and actionable. Do NOT start with 'Overall Assessment:' or repeat the risk level (it's in the tag). Do NOT explain confidence scores - they're displayed separately."),
 });
 
 const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub activity into clear, concise summaries for non-technical stakeholders.
@@ -402,21 +402,46 @@ Generate a ${perspective}-focused summary.`;
             return undefined;
           }
 
-          const impactPrompt = `Analyze the impact of these code changes:
+          // Build prompt with actual code changes
+          const filesWithPatches = fileDiffs
+            .filter((f) => f.patch && f.patch.length > 0)
+            .slice(0, 20); // Limit to avoid token limits
+          
+          const filesWithoutPatches = fileDiffs.filter(
+            (f) => !f.patch || f.patch.length === 0
+          );
 
-Files changed:
-${fileDiffs.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")}
+          let impactPrompt = `You're reviewing code changes like a senior engineer. Look at the actual code diffs and flag any bugs, potential issues, or things that look off. Be specific and actionable.
+
+Code changes:
+
+${filesWithPatches.length > 0 
+  ? filesWithPatches.map((f) => {
+      const patchPreview = f.patch!.length > 8000 
+        ? f.patch!.substring(0, 8000) + "\n... (truncated)"
+        : f.patch!;
+      return `File: ${f.filename} (${f.status}, +${f.additions} -${f.deletions})
+${patchPreview}
+---`;
+    }).join("\n\n")
+  : fileDiffs.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")
+}
+
+${filesWithoutPatches.length > 0 && filesWithPatches.length > 0 
+  ? `\nOther files changed (no patch available):\n${filesWithoutPatches.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")}` 
+  : ""}
 
 Known code surfaces:
 ${surfaces.map((s) => `- ${s.name} (${s.surfaceType}): ${s.filePath}`).join("\n")}
 
-For each affected surface, determine:
+For each affected surface:
 1. Impact type (modified/added/deleted)
-2. Risk level (low/medium/high) - consider: is this a core component? Does it have many dependencies? Is it user-facing?
-3. Confidence (0-100) - how certain you are about the risk assessment
-4. Explanation - be concise and direct. Explain WHY this risk level was assigned. Do NOT explain what the confidence score means - it's already displayed separately. (e.g., "High risk because this component is used across multiple features")
+2. Risk level (low/medium/high) - based on: criticality, dependencies, user-facing impact, and any bugs/issues you spot
+3. Confidence (0-100) - how certain you are about the assessment
+4. Explanation - Write like a senior engineer's note. Flag specific bugs, suspicious patterns, missing error handling, potential race conditions, security issues, or other concerns you see in the actual code. If nothing looks off, briefly explain why. Be direct and actionable. Do NOT explain confidence scores.
 
-Also provide an overall risk assessment and explanation for the entire change set. Be concise and straight to the point. Do NOT start with "Overall Assessment:" or repeat the risk level (it's already shown in the tag). Do NOT explain what the confidence score indicates - it's already displayed separately. Focus on the actual impact and reasoning.`;
+Overall assessment:
+Provide an overall risk level and write notes like you're briefing a senior engineer. What stands out? Any bugs or issues across the change set? Any patterns of concern? If nothing concerning, note why. Be concise and specific. Do NOT start with "Overall Assessment:" or repeat the risk level (it's in the tag). Do NOT explain confidence scores.`;
 
           const { object: impact } = await generateObject({
             model,
