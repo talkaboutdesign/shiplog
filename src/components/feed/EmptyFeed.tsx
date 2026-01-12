@@ -11,7 +11,7 @@ export function EmptyFeed() {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground">
-          Push commits, open pull requests, or create issues to see them appear
+          Push commits or open pull requests to see them appear
           as AI-generated summaries.
         </p>
       </CardContent>

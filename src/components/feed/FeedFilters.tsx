@@ -60,7 +60,6 @@ export function FeedFilters({
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="push">Push</TabsTrigger>
           <TabsTrigger value="pull_request">PR</TabsTrigger>
-          <TabsTrigger value="issues">Issues</TabsTrigger>
         </TabsList>
       </Tabs>
 

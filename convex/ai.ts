@@ -3,6 +3,7 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -82,7 +83,10 @@ function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: strin
   }
 }
 
-function buildEventPrompt(event: any, fileDiffs?: any[]): string {
+function buildEventPrompt(
+  event: any, 
+  fileDiffs?: any[]
+): string {
   const { type, payload } = event;
 
   switch (type) {
@@ -90,8 +94,6 @@ function buildEventPrompt(event: any, fileDiffs?: any[]): string {
       return buildPushPrompt(payload, fileDiffs);
     case "pull_request":
       return buildPRPrompt(payload, fileDiffs);
-    case "issues":
-      return buildIssuePrompt(payload);
     default:
       return `Summarize this GitHub ${type} event: ${JSON.stringify(payload)}`;
   }
@@ -154,16 +156,6 @@ Stats: ${additions || 0} additions, ${deletions || 0} deletions, ${changed_files
   return prompt;
 }
 
-function buildIssuePrompt(payload: any): string {
-  const { action, issue } = payload;
-  const { title, body } = issue || {};
-
-  return `An issue was ${action}: "${title || "Untitled"}"
-
-Description: ${body || "No description provided"}
-
-Summarize this issue activity.`;
-}
 
 export const digestEvent = internalAction({
   args: { eventId: v.id("events") },
@@ -238,18 +230,13 @@ export const digestEvent = internalAction({
       // 3. Extract metadata immediately (available synchronously from event payload)
       const contributors = [event.actorGithubUsername];
       const metadata: any = {};
+      
       if (event.type === "pull_request") {
         const pr = event.payload.pull_request;
         if (pr) {
           metadata.prNumber = pr.number;
           metadata.prUrl = pr.html_url;
           metadata.prState = pr.state;
-        }
-      } else if (event.type === "issues") {
-        const issue = event.payload.issue;
-        if (issue) {
-          metadata.issueNumber = issue.number;
-          metadata.issueUrl = issue.html_url;
         }
       } else if (event.type === "push") {
         metadata.commitCount = event.payload.commits?.length || 0;
@@ -262,10 +249,9 @@ export const digestEvent = internalAction({
         ? `Push: ${metadata.commitCount || 0} commit(s)`
         : event.type === "pull_request"
         ? event.payload.pull_request?.title || "Pull Request"
-        : event.type === "issues"
-        ? event.payload.issue?.title || "Issue"
         : "Processing event...";
 
+      // 5. Create new digest
       const digestId = await ctx.runMutation(internal.digests.create, {
         repositoryId: event.repositoryId,
         eventId: args.eventId,
@@ -279,7 +265,7 @@ export const digestEvent = internalAction({
         impactAnalysis: undefined,
       });
 
-      // 5. Fetch file diffs if not already stored (indexCheck already done above)
+      // 6. Fetch file diffs if not already stored (indexCheck already done above)
       let fileDiffs = event.fileDiffs;
       if (!fileDiffs && (event.type === "push" || event.type === "pull_request")) {
         try {
@@ -334,7 +320,7 @@ export const digestEvent = internalAction({
         }
       }
 
-      // 5. Generate digest with enhanced prompt (needed first to determine perspectives)
+      // 6. Generate digest with enhanced prompt (needed first to determine perspectives)
       const modelName = preferredProvider === "openrouter" ? apiKeys.openrouterModel : undefined;
       const model = getModel(preferredProvider, apiKey, modelName);
       const prompt = buildEventPrompt(event, fileDiffs);
@@ -346,7 +332,7 @@ export const digestEvent = internalAction({
         prompt,
       });
 
-      // 6. Update digest with AI-generated content (title, summary, category, whyThisMatters)
+      // 8. Update digest with AI-generated content (title, summary, category, whyThisMatters)
       await ctx.runMutation(internal.digests.update, {
         digestId,
         title: object.title,
@@ -355,7 +341,7 @@ export const digestEvent = internalAction({
         whyThisMatters: object.whyThisMatters,
       });
 
-      // 7. Determine which perspectives are relevant (needed before parallel generation)
+      // 9. Determine which perspectives are relevant (needed before parallel generation)
       const relevantPerspectives: Array<"bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = [];
       
       if (object.category === "bugfix") relevantPerspectives.push("bugfix");
@@ -371,7 +357,7 @@ export const digestEvent = internalAction({
         relevantPerspectives.push(object.category as any || "refactor");
       }
 
-      // 7. Prepare for parallel AI generation: fetch surfaces if needed for impact analysis
+      // 10. Prepare for parallel AI generation: fetch surfaces if needed for impact analysis
       const surfacesPromise = repository.indexStatus === "completed" && fileDiffs && fileDiffs.length > 0
         ? ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
             repositoryId: event.repositoryId,
@@ -379,7 +365,7 @@ export const digestEvent = internalAction({
           })
         : Promise.resolve([]);
 
-      // 8. Generate perspectives and impact analysis in parallel
+      // 11. Generate perspectives and impact analysis in parallel
       const perspectivesToGenerate = relevantPerspectives.slice(0, 3);
       const perspectivePromises = perspectivesToGenerate.map(async (perspective) => {
         try {
@@ -482,7 +468,7 @@ Also provide an overall risk assessment and explanation for the entire change se
         (p): p is NonNullable<typeof p> => p !== null
       );
 
-      // 8. Update digest with impact analysis if available
+      // 12. Update digest with impact analysis if available
       if (impactAnalysis) {
         await ctx.runMutation(internal.digests.update, {
           digestId,
@@ -490,7 +476,7 @@ Also provide an overall risk assessment and explanation for the entire change se
         });
       }
 
-      // 9. Store perspectives in batch
+      // 13. Store perspectives in batch
       if (perspectives.length > 0) {
         await ctx.runMutation(internal.digests.createPerspectivesBatch, {
           digestId,

@@ -38,14 +38,13 @@ export function Dashboard() {
     repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
   );
 
-  // Extract unique contributors from digests
-  const contributors = digests
-    ? Array.from(
-        new Set(
-          digests.flatMap((d) => d.contributors).filter((c) => c)
-        )
-      )
-    : [];
+  // Extract unique contributors from digests and events
+  const contributors = Array.from(
+    new Set([
+      ...(digests ? digests.flatMap((d) => d.contributors).filter((c) => c) : []),
+      ...(events ? events.map((e) => e.actorGithubUsername).filter((c) => c) : []),
+    ])
+  ).sort();
 
   // Check if API key is configured
   const hasApiKey =
@@ -146,7 +145,8 @@ export function Dashboard() {
                     filters.repositoryId && filters.repositoryId !== "all"
                       ? [filters.repositoryId]
                       : repositoryIds
-                  } 
+                  }
+                  filters={filters}
                 />
               </>
             )}
@@ -157,7 +157,13 @@ export function Dashboard() {
   );
 }
 
-function MultiRepoActivityFeed({ repositoryIds }: { repositoryIds: string[] }) {
+function MultiRepoActivityFeed({ 
+  repositoryIds, 
+  filters 
+}: { 
+  repositoryIds: string[];
+  filters: FeedFiltersType;
+}) {
   const digests = useQuery(
     api.digests.listByRepositories,
     repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
@@ -171,18 +177,109 @@ function MultiRepoActivityFeed({ repositoryIds }: { repositoryIds: string[] }) {
     return <FeedSkeleton />;
   }
 
+  // Create a map of eventId -> event for efficient lookup
+  const eventMap = new Map(events.map((e) => [e._id, e]));
+
+  // Calculate time range threshold
+  const now = Date.now();
+  const timeRangeThreshold = 
+    filters.timeRange === "24h" ? now - 24 * 60 * 60 * 1000 :
+    filters.timeRange === "7d" ? now - 7 * 24 * 60 * 60 * 1000 :
+    null;
+
+  // Filter events
+  const filteredEvents = events.filter((event) => {
+    // Filter by event type
+    if (filters.eventType !== "all") {
+      if (event.type !== filters.eventType) {
+        return false;
+      }
+    }
+
+    // Filter by time range
+    if (timeRangeThreshold !== null) {
+      if (event.occurredAt < timeRangeThreshold) {
+        return false;
+      }
+    }
+
+    // Filter by contributor
+    if (filters.contributor) {
+      if (event.actorGithubUsername !== filters.contributor) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  // Filter digests
+  const filteredDigests = digests.filter((digest) => {
+    const event = eventMap.get(digest.eventId);
+    if (!event) {
+      return false; // Skip digests without associated events
+    }
+
+    // Filter by event type
+    if (filters.eventType !== "all") {
+      if (event.type !== filters.eventType) {
+        return false;
+      }
+    }
+
+    // Filter by time range (use digest createdAt, but also check event occurredAt for consistency)
+    if (timeRangeThreshold !== null) {
+      // Use the earlier of the two timestamps to be inclusive
+      const relevantTimestamp = Math.min(digest.createdAt, event.occurredAt);
+      if (relevantTimestamp < timeRangeThreshold) {
+        return false;
+      }
+    }
+
+    // Filter by contributor
+    if (filters.contributor) {
+      // Check both the digest contributors and the event actor
+      const hasContributor = 
+        digest.contributors.includes(filters.contributor) ||
+        event.actorGithubUsername === filters.contributor;
+      if (!hasContributor) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  // Deduplicate digests by event ID (one digest per event)
+  const seenEventIds = new Set<string>();
+  
+  // Track seen event IDs
+  for (const digest of filteredDigests) {
+    const event = eventMap.get(digest.eventId);
+    if (event) {
+      seenEventIds.add(event._id);
+    }
+  }
+
+  // Build final deduplicated list - include if the event ID was seen
+  const deduplicatedDigests = filteredDigests.filter((digest) => {
+    const event = eventMap.get(digest.eventId);
+    if (!event) return false;
+    return seenEventIds.has(event._id);
+  });
+
   // Get events that don't have digests (pending, processing, failed, skipped)
-  const eventsWithoutDigests = events.filter(
-    (event) => event.status !== "completed" || !digests.some((d) => d.eventId === event._id)
+  const eventsWithoutDigests = filteredEvents.filter(
+    (event) => event.status !== "completed" || !deduplicatedDigests.some((d) => d.eventId === event._id)
   );
 
-  if (digests.length === 0 && eventsWithoutDigests.length === 0) {
+  if (deduplicatedDigests.length === 0 && eventsWithoutDigests.length === 0) {
     return <EmptyFeed />;
   }
 
   // Combine digests and events, showing events without digests
   const allItems: Array<{ type: "digest" | "event"; id: string; timestamp: number }> = [
-    ...digests.map((d) => ({ type: "digest" as const, id: d._id, timestamp: d.createdAt })),
+    ...deduplicatedDigests.map((d) => ({ type: "digest" as const, id: d._id, timestamp: d.createdAt })),
     ...eventsWithoutDigests.map((e) => ({ type: "event" as const, id: e._id, timestamp: e.occurredAt })),
   ].sort((a, b) => b.timestamp - a.timestamp);
 
@@ -190,8 +287,9 @@ function MultiRepoActivityFeed({ repositoryIds }: { repositoryIds: string[] }) {
     <div className="space-y-4">
       {allItems.map((item) => {
         if (item.type === "digest") {
-          const digest = digests.find((d) => d._id === item.id);
-          return digest ? <DigestCard key={digest._id} digest={digest} /> : null;
+          const digest = deduplicatedDigests.find((d) => d._id === item.id);
+          const event = digest ? eventMap.get(digest.eventId) : undefined;
+          return digest ? <DigestCard key={digest._id} digest={digest} event={event} /> : null;
         } else {
           const event = eventsWithoutDigests.find((e) => e._id === item.id);
           return event ? <EventCard key={event._id} event={event} /> : null;

@@ -27,8 +27,6 @@ const statusLabels: Record<Event["status"], string> = {
 const eventTypeLabels: Record<string, string> = {
   push: "Push",
   pull_request: "Pull Request",
-  issues: "Issue",
-  pull_request_review: "PR Review",
 };
 
 export function EventCard({ event }: EventCardProps) {
@@ -48,11 +46,10 @@ export function EventCard({ event }: EventCardProps) {
   } else if (event.type === "pull_request") {
     title = payload.pull_request?.title || "Pull Request";
     description = payload.pull_request?.body;
-  } else if (event.type === "issues") {
-    title = payload.issue?.title || "Issue";
-    description = payload.issue?.body;
   }
 
+  const showStatusBadge = true;
+  
   return (
     <Card className={event.status === "failed" || event.status === "skipped" ? "border-destructive" : ""}>
       <CardHeader>
@@ -60,7 +57,7 @@ export function EventCard({ event }: EventCardProps) {
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <CardTitle className="text-lg">{title}</CardTitle>
-              <Badge variant={statusColor}>{statusLabel}</Badge>
+              {showStatusBadge && <Badge variant={statusColor}>{statusLabel}</Badge>}
               <Badge variant="outline">{eventTypeLabel}</Badge>
             </div>
             <CardDescription>

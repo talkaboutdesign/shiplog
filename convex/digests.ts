@@ -25,8 +25,6 @@ export const create = internalMutation({
         prNumber: v.optional(v.number()),
         prUrl: v.optional(v.string()),
         prState: v.optional(v.string()),
-        issueNumber: v.optional(v.number()),
-        issueUrl: v.optional(v.string()),
         commitCount: v.optional(v.number()),
         compareUrl: v.optional(v.string()),
         branch: v.optional(v.string()),
@@ -126,6 +124,8 @@ export const update = internalMutation({
         overallExplanation: v.optional(v.string()),
       })
     ),
+    eventId: v.optional(v.id("events")),
+    updateTimestamp: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const update: {
@@ -134,6 +134,8 @@ export const update = internalMutation({
       category?: "feature" | "bugfix" | "refactor" | "docs" | "chore" | "security";
       whyThisMatters?: string;
       impactAnalysis?: any;
+      eventId?: Id<"events">;
+      createdAt?: number;
     } = {};
 
     if (args.title !== undefined) {
@@ -150,6 +152,13 @@ export const update = internalMutation({
     }
     if (args.impactAnalysis !== undefined) {
       update.impactAnalysis = args.impactAnalysis;
+    }
+    if (args.eventId !== undefined) {
+      update.eventId = args.eventId;
+    }
+    // Update timestamp to move to top of feed
+    if (args.updateTimestamp) {
+      update.createdAt = Date.now();
     }
 
     await ctx.db.patch(args.digestId, update);

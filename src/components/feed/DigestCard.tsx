@@ -8,30 +8,36 @@ import { WhyThisMatters } from "./WhyThisMatters";
 import { ImpactAnalysis } from "./ImpactAnalysis";
 import { usePerspectives } from "@/hooks/usePerspectives";
 import { useEvent } from "@/hooks/useEvent";
-import type { Digest } from "../../../convex/types";
+import type { Digest, Event } from "../../../convex/types";
 
 interface DigestCardProps {
   digest: Digest;
   repositoryFullName?: string;
+  event?: Event; // Optional event prop to avoid extra query
 }
 
-export function DigestCard({ digest, repositoryFullName }: DigestCardProps) {
+export function DigestCard({ digest, repositoryFullName, event: eventProp }: DigestCardProps) {
   const contributor = digest.contributors[0] || "unknown";
-  const githubUrl = digest.metadata?.prUrl || digest.metadata?.issueUrl || digest.metadata?.compareUrl;
+  const githubUrl = digest.metadata?.prUrl || digest.metadata?.compareUrl;
   const perspectives = usePerspectives(digest._id);
-  const event = useEvent(digest._id);
+  // Use provided event or fetch it
+  const fetchedEvent = useEvent(digest._id);
+  const event = eventProp || fetchedEvent;
 
   // Check if digest is still being processed (has placeholder data)
   const isProcessing = digest.summary === "Analyzing changes..." || 
     digest.title.includes("Processing") || 
     digest.title.includes("Push:") && !digest.category;
 
+  // Determine event type for UI differentiation
+  const isCodeChange = event?.type === "push" || event?.type === "pull_request";
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {isProcessing && !digest.category ? (
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-lg">{digest.title}</CardTitle>
@@ -41,6 +47,12 @@ export function DigestCard({ digest, repositoryFullName }: DigestCardProps) {
                 </div>
               ) : (
                 <CardTitle className="text-lg">{digest.title}</CardTitle>
+              )}
+              {/* Show code change indicator for pushes/PRs */}
+              {isCodeChange && (
+                <Badge variant="outline" className="text-xs">
+                  {event.type === "push" ? "Code Push" : "Pull Request"}
+                </Badge>
               )}
             </div>
             {/* Only show perspective badges, show nothing if no perspectives exist */}
@@ -103,15 +115,9 @@ export function DigestCard({ digest, repositoryFullName }: DigestCardProps) {
               <span>PR #{digest.metadata.prNumber}</span>
             </>
           )}
-          {digest.metadata?.issueNumber && (
-            <>
-              {digest.metadata?.prNumber && <span>•</span>}
-              <span>Issue #{digest.metadata.issueNumber}</span>
-            </>
-          )}
           {digest.metadata?.commitCount && (
             <>
-              {(digest.metadata?.prNumber || digest.metadata?.issueNumber) && <span>•</span>}
+              {digest.metadata?.prNumber && <span>•</span>}
               <span>{digest.metadata.commitCount} commit(s)</span>
             </>
           )}

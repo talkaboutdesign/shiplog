@@ -26,6 +26,4 @@ export type DigestCategory =
 export type AIProvider = "openai" | "anthropic" | "openrouter";
 export type GitHubEventType =
   | "push"
-  | "pull_request"
-  | "pull_request_review"
-  | "issues";
+  | "pull_request";

@@ -122,8 +122,6 @@ export default defineSchema({
         prNumber: v.optional(v.number()),
         prUrl: v.optional(v.string()),
         prState: v.optional(v.string()),
-        issueNumber: v.optional(v.number()),
-        issueUrl: v.optional(v.string()),
         commitCount: v.optional(v.number()),
         compareUrl: v.optional(v.string()),
         branch: v.optional(v.string()),

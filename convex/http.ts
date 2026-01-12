@@ -148,7 +148,7 @@ http.route({
     }
 
     // Only process events we care about
-    const supportedEvents = ["push", "pull_request", "pull_request_review", "issues"];
+    const supportedEvents = ["push", "pull_request"];
     if (!supportedEvents.includes(eventType)) {
       return new Response("Event type not supported", { status: 200 });
     }
@@ -196,14 +196,10 @@ http.route({
         actorGithubUsername = payload.pusher?.name || payload.sender?.login || "unknown";
         actorGithubId = payload.sender?.id || 0;
         actorAvatarUrl = payload.sender?.avatar_url;
-      } else if (eventType === "pull_request" || eventType === "pull_request_review") {
-        actorGithubUsername = payload.sender?.login || payload.review?.user?.login || "unknown";
-        actorGithubId = payload.sender?.id || payload.review?.user?.id || 0;
-        actorAvatarUrl = payload.sender?.avatar_url || payload.review?.user?.avatar_url;
-      } else if (eventType === "issues") {
-        actorGithubUsername = payload.sender?.login || payload.issue?.user?.login || "unknown";
-        actorGithubId = payload.sender?.id || payload.issue?.user?.id || 0;
-        actorAvatarUrl = payload.sender?.avatar_url || payload.issue?.user?.avatar_url;
+      } else if (eventType === "pull_request") {
+        actorGithubUsername = payload.sender?.login || "unknown";
+        actorGithubId = payload.sender?.id || 0;
+        actorAvatarUrl = payload.sender?.avatar_url;
       }
 
       // Determine occurredAt timestamp
@@ -224,13 +220,6 @@ http.route({
           occurredAt = new Date(payload.pull_request.updated_at).getTime();
         } else if (payload.pull_request?.created_at) {
           occurredAt = new Date(payload.pull_request.created_at).getTime();
-        }
-      } else if (eventType === "issues") {
-        // For issue events, use the issue updated_at or created_at
-        if (payload.issue?.updated_at) {
-          occurredAt = new Date(payload.issue.updated_at).getTime();
-        } else if (payload.issue?.created_at) {
-          occurredAt = new Date(payload.issue.created_at).getTime();
         }
       }
 
