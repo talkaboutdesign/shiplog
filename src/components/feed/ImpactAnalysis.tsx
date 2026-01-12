@@ -133,9 +133,6 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
         {impactAnalysis.overallExplanation ? (
           <div className="text-sm leading-relaxed">
             <p>{impactAnalysis.overallExplanation}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              <strong>Confidence Score:</strong> This indicates how certain the AI is about the risk assessment. Higher confidence means the analysis is more reliable based on the code structure and changes detected.
-            </p>
           </div>
         ) : (
           <div className="space-y-2">

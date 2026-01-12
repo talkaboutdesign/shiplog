@@ -36,12 +36,12 @@ const ImpactAnalysisSchema = z.object({
       impactType: z.enum(["modified", "added", "deleted"]),
       riskLevel: z.enum(["low", "medium", "high"]),
       confidence: z.number().min(0).max(100),
-      explanation: z.string().describe("Brief note like a senior engineer would write. Flag specific issues, bugs, or suspicious patterns you see in the code changes. Be direct and actionable. If nothing looks off, explain why the risk level. Do NOT explain confidence scores - they're displayed separately."),
+      explanation: z.string().describe("Brief senior engineer notes. Be specific: what bugs/issues found (with line/function references if possible), what looks suspicious, what's the impact. If nothing concerning, briefly note why. Examples: 'Missing null check on user.id access', 'Potential race condition in async function fetchData', 'High risk: utility used by 15+ files', 'Clean refactor, no logic changes'. Do NOT explain confidence scores."),
     })
   ),
   overallRisk: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(100),
-  overallExplanation: z.string().describe("Write like notes to a senior engineer reviewing this change. Flag any bugs, potential issues, or things that look off. Be specific about what you see in the code. If nothing concerning, note why. Be concise and actionable. Do NOT start with 'Overall Assessment:' or repeat the risk level (it's in the tag). Do NOT explain confidence scores - they're displayed separately."),
+  overallExplanation: z.string().describe("Brief senior engineer summary. Focus on: critical bugs/security issues, patterns of concern, high-impact changes, red flags. Be specific with examples. If nothing concerning, note why. Be concise. Do NOT start with 'Overall Assessment:' or repeat risk level (it's in the tag). Do NOT explain confidence scores."),
 });
 
 const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub activity into clear, concise summaries for non-technical stakeholders.
@@ -411,37 +411,119 @@ Generate a ${perspective}-focused summary.`;
             (f) => !f.patch || f.patch.length === 0
           );
 
-          let impactPrompt = `You're reviewing code changes like a senior engineer. Look at the actual code diffs and flag any bugs, potential issues, or things that look off. Be specific and actionable.
+          // Create a map of file path to surfaces for quick lookup
+          const surfacesByPath = new Map<string, Array<typeof surfaces[0]>>();
+          surfaces.forEach((s) => {
+            if (!surfacesByPath.has(s.filePath)) {
+              surfacesByPath.set(s.filePath, []);
+            }
+            surfacesByPath.get(s.filePath)!.push(s);
+          });
 
-Code changes:
+          // Build structured code changes with context
+          const structuredChanges = filesWithPatches.map((f) => {
+            const fileSurfaces = surfacesByPath.get(f.filename) || [];
+            const patchPreview = f.patch!.length > 10000 
+              ? f.patch!.substring(0, 10000) + "\n... (truncated)"
+              : f.patch!;
+            
+            let context = `File: ${f.filename} (${f.status}, +${f.additions} -${f.deletions})`;
+            
+            if (fileSurfaces.length > 0) {
+              const surfaceInfo = fileSurfaces.map((s) => {
+                const deps = s.dependencies.length > 0 
+                  ? `\n  Dependencies: ${s.dependencies.slice(0, 5).join(", ")}${s.dependencies.length > 5 ? ` (+${s.dependencies.length - 5} more)` : ""}`
+                  : "";
+                const exports = s.exports && s.exports.length > 0
+                  ? `\n  Exports: ${s.exports.slice(0, 5).join(", ")}${s.exports.length > 5 ? ` (+${s.exports.length - 5} more)` : ""}`
+                  : "";
+                return `  - ${s.name} (${s.surfaceType})${deps}${exports}`;
+              }).join("\n");
+              context += `\nKnown surfaces in this file:\n${surfaceInfo}`;
+            }
+            
+            return `${context}\n\nCode diff:\n${patchPreview}`;
+          }).join("\n\n---\n\n");
 
-${filesWithPatches.length > 0 
-  ? filesWithPatches.map((f) => {
-      const patchPreview = f.patch!.length > 8000 
-        ? f.patch!.substring(0, 8000) + "\n... (truncated)"
-        : f.patch!;
-      return `File: ${f.filename} (${f.status}, +${f.additions} -${f.deletions})
-${patchPreview}
----`;
-    }).join("\n\n")
-  : fileDiffs.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")
-}
+          let impactPrompt = `You're a senior engineer reviewing code changes. Systematically scan the code for bugs, security issues, and potential problems. Be specific and actionable.
 
-${filesWithoutPatches.length > 0 && filesWithPatches.length > 0 
-  ? `\nOther files changed (no patch available):\n${filesWithoutPatches.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")}` 
+=== CODE CHANGES ===
+
+${structuredChanges}
+
+${filesWithoutPatches.length > 0 
+  ? `\nFiles changed without patch data:\n${filesWithoutPatches.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")}` 
   : ""}
 
-Known code surfaces:
-${surfaces.map((s) => `- ${s.name} (${s.surfaceType}): ${s.filePath}`).join("\n")}
+=== SCANNING GUIDELINES ===
 
-For each affected surface:
-1. Impact type (modified/added/deleted)
-2. Risk level (low/medium/high) - based on: criticality, dependencies, user-facing impact, and any bugs/issues you spot
-3. Confidence (0-100) - how certain you are about the assessment
-4. Explanation - Write like a senior engineer's note. Flag specific bugs, suspicious patterns, missing error handling, potential race conditions, security issues, or other concerns you see in the actual code. If nothing looks off, briefly explain why. Be direct and actionable. Do NOT explain confidence scores.
+For each file, systematically check:
+
+1. **Security Issues:**
+   - SQL injection, XSS, CSRF vulnerabilities
+   - Unsanitized user input
+   - Missing authentication/authorization checks
+   - Exposed secrets, API keys, or credentials
+   - Insecure dependencies or outdated packages
+
+2. **Bugs & Logic Errors:**
+   - Null/undefined access without checks
+   - Off-by-one errors, array bounds
+   - Race conditions, async/await issues
+   - Type mismatches, incorrect type handling
+   - Missing return statements or early returns
+   - Incorrect conditional logic
+
+3. **Error Handling:**
+   - Missing try/catch blocks
+   - Unhandled promise rejections
+   - Silent failures
+   - Poor error messages
+
+4. **Performance Issues:**
+   - N+1 queries, inefficient loops
+   - Missing memoization where needed
+   - Large bundle sizes, unnecessary imports
+   - Memory leaks (event listeners, subscriptions)
+
+5. **Code Quality:**
+   - Breaking changes to APIs/contracts
+   - Removed functionality without migration
+   - Inconsistent patterns with codebase
+   - Missing tests for critical paths
+
+6. **Dependency Impact:**
+   - Files with many dependencies (high coupling) are riskier
+   - Changes to exported APIs affect downstream code
+   - Breaking changes to shared utilities/services
+
+=== ANALYSIS TASK ===
+
+For each affected surface (match file paths to known surfaces):
+1. Impact type: modified/added/deleted
+2. Risk level (low/medium/high):
+   - LOW: Minor changes, well-isolated, no bugs spotted
+   - MEDIUM: Moderate changes, some dependencies, minor concerns
+   - HIGH: Major changes, many dependencies, bugs/issues found, security concerns
+3. Confidence (0-100):
+   - 80-100: Clear understanding, complete context, obvious issues or clean code
+   - 50-79: Good understanding but some ambiguity
+   - 20-49: Limited context or unclear changes
+   - 0-19: Very unclear, missing critical context
+4. Explanation: Write like brief notes to a senior engineer. Be specific:
+   - What bugs/issues did you find? (e.g., "Missing null check on line X", "Potential race condition in async function Y")
+   - What looks suspicious? (e.g., "Removed error handling without replacement", "Changed API contract without migration")
+   - What's the impact? (e.g., "High risk: This utility is used by 15+ files", "Security concern: User input not sanitized")
+   - If nothing concerning: Briefly note why (e.g., "Clean refactor, no logic changes", "Well-tested utility function")
+   Do NOT explain confidence scores - they're displayed separately.
 
 Overall assessment:
-Provide an overall risk level and write notes like you're briefing a senior engineer. What stands out? Any bugs or issues across the change set? Any patterns of concern? If nothing concerning, note why. Be concise and specific. Do NOT start with "Overall Assessment:" or repeat the risk level (it's in the tag). Do NOT explain confidence scores.`;
+Provide overall risk level and write like briefing a senior engineer. Focus on:
+- Critical bugs or security issues found
+- Patterns of concern across files
+- High-impact changes (many dependencies, breaking changes)
+- Any red flags that need immediate attention
+Be concise and specific. Do NOT start with "Overall Assessment:" or repeat the risk level (it's in the tag). Do NOT explain confidence scores.`;
 
           const { object: impact } = await generateObject({
             model,
