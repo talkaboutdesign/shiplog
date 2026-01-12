@@ -77,8 +77,11 @@ export const updateApiKeys = mutation({
   args: {
     openai: v.optional(v.string()),
     anthropic: v.optional(v.string()),
-    preferredProvider: v.optional(v.union(v.literal("openai"), v.literal("anthropic"))),
+    openrouter: v.optional(v.string()),
+    openrouterModel: v.optional(v.string()),
+    preferredProvider: v.optional(v.union(v.literal("openai"), v.literal("anthropic"), v.literal("openrouter"))),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -98,6 +101,8 @@ export const updateApiKeys = mutation({
     const updatedKeys = {
       openai: args.openai !== undefined ? args.openai : existingKeys.openai,
       anthropic: args.anthropic !== undefined ? args.anthropic : existingKeys.anthropic,
+      openrouter: args.openrouter !== undefined ? args.openrouter : existingKeys.openrouter,
+      openrouterModel: args.openrouterModel !== undefined ? args.openrouterModel : existingKeys.openrouterModel,
       preferredProvider: args.preferredProvider !== undefined
         ? args.preferredProvider
         : existingKeys.preferredProvider,
@@ -107,5 +112,6 @@ export const updateApiKeys = mutation({
       apiKeys: updatedKeys,
       updatedAt: Date.now(),
     });
+    return null;
   },
 });

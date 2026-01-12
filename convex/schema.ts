@@ -12,8 +12,10 @@ export default defineSchema({
       v.object({
         openai: v.optional(v.string()),
         anthropic: v.optional(v.string()),
+        openrouter: v.optional(v.string()),
+        openrouterModel: v.optional(v.string()),
         preferredProvider: v.optional(
-          v.union(v.literal("openai"), v.literal("anthropic"))
+          v.union(v.literal("openai"), v.literal("anthropic"), v.literal("openrouter"))
         ),
       })
     ),

@@ -35,7 +35,7 @@ export function Dashboard() {
 
   // Check if API key is configured
   const hasApiKey =
-    user?.apiKeys?.openai || user?.apiKeys?.anthropic;
+    user?.apiKeys?.openai || user?.apiKeys?.anthropic || user?.apiKeys?.openrouter;
 
   if (repository === undefined || user === undefined) {
     return (

@@ -87,3 +87,20 @@ export const getById = internalQuery({
     return await ctx.db.get(args.eventId);
   },
 });
+
+export const listByRepository = query({
+  args: {
+    repositoryId: v.id("repositories"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 50;
+    return await ctx.db
+      .query("events")
+      .withIndex("by_repository_time", (q) =>
+        q.eq("repositoryId", args.repositoryId)
+      )
+      .order("desc")
+      .take(limit);
+  },
+});

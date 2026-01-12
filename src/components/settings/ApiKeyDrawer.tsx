@@ -25,24 +25,35 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
 
   const [openaiKey, setOpenaiKey] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
-  const [preferredProvider, setPreferredProvider] = useState<"openai" | "anthropic">("openai");
+  const [openrouterKey, setOpenrouterKey] = useState("");
+  const [openrouterModel, setOpenrouterModel] = useState("");
+  const [preferredProvider, setPreferredProvider] = useState<"openai" | "anthropic" | "openrouter">("openai");
 
   // Initialize form when user data loads or drawer opens
   useEffect(() => {
     if (open && user?.apiKeys) {
       setOpenaiKey(user.apiKeys.openai || "");
       setAnthropicKey(user.apiKeys.anthropic || "");
+      setOpenrouterKey(user.apiKeys.openrouter || "");
+      setOpenrouterModel(user.apiKeys.openrouterModel || "");
       setPreferredProvider(user.apiKeys.preferredProvider || "openai");
     }
   }, [open, user]);
 
   const handleSave = async () => {
-    await updateApiKeys({
-      openai: openaiKey || undefined,
-      anthropic: anthropicKey || undefined,
-      preferredProvider,
-    });
-    setOpen(false);
+    try {
+      await updateApiKeys({
+        openai: openaiKey || undefined,
+        anthropic: anthropicKey || undefined,
+        openrouter: openrouterKey || undefined,
+        openrouterModel: openrouterModel || undefined,
+        preferredProvider,
+      });
+      setOpen(false);
+    } catch (error) {
+      console.error("Failed to save API keys:", error);
+      // You might want to show an error toast/alert here
+    }
   };
 
   return (
@@ -86,17 +97,46 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="openrouter-key">OpenRouter API Key</Label>
+            <Input
+              id="openrouter-key"
+              type="password"
+              placeholder="sk-or-..."
+              value={openrouterKey}
+              onChange={(e) => setOpenrouterKey(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Your OpenRouter API key (required for OpenRouter provider)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="openrouter-model">OpenRouter Model</Label>
+            <Input
+              id="openrouter-model"
+              type="text"
+              placeholder="openai/gpt-4o-mini"
+              value={openrouterModel}
+              onChange={(e) => setOpenrouterModel(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Model identifier (e.g., "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku")
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="provider">Preferred Provider</Label>
             <Select
               id="provider"
               value={preferredProvider}
               onChange={(e) => {
-                const value = e.target.value as "openai" | "anthropic";
+                const value = e.target.value as "openai" | "anthropic" | "openrouter";
                 setPreferredProvider(value);
               }}
             >
               <option value="openai">OpenAI (GPT-4o-mini)</option>
               <option value="anthropic">Anthropic (Claude 3.5 Haiku)</option>
+              <option value="openrouter">OpenRouter</option>
             </Select>
             <p className="text-xs text-muted-foreground">
               Select which AI provider to use by default

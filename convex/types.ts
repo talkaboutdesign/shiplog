@@ -23,7 +23,7 @@ export type DigestCategory =
   | "docs"
   | "chore"
   | "security";
-export type AIProvider = "openai" | "anthropic";
+export type AIProvider = "openai" | "anthropic" | "openrouter";
 export type GitHubEventType =
   | "push"
   | "pull_request"

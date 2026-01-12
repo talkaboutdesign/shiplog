@@ -116,6 +116,7 @@ http.route({
   path: "/github/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    console.log("Webhook handler called - /github/webhook");
     const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
     if (!webhookSecret) {
       console.error("GITHUB_WEBHOOK_SECRET not configured");
@@ -159,7 +160,7 @@ http.route({
         return new Response("Missing installation ID", { status: 400 });
       }
 
-      const repository = await ctx.runQuery(api.repositories.getByInstallation, {
+      const repository = await ctx.runQuery(internal.repositories.getByInstallationInternal, {
         installationId,
       });
 

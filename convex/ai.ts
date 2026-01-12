@@ -34,13 +34,20 @@ For the category, choose the most appropriate:
 - chore: Maintenance, dependencies, tooling
 - security: Security-related changes`;
 
-function getModel(provider: "openai" | "anthropic", apiKey: string) {
+function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: string, modelName?: string) {
   if (provider === "openai") {
     const openai = createOpenAI({ apiKey });
     return openai("gpt-4o-mini");
-  } else {
+  } else if (provider === "anthropic") {
     const anthropic = createAnthropic({ apiKey });
     return anthropic("claude-3-5-haiku-latest");
+  } else {
+    // openrouter - use OpenAI SDK provider with OpenRouter baseURL
+    const openrouter = createOpenAI({ 
+      apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+    return openrouter(modelName || "openai/gpt-4o-mini");
   }
 }
 
@@ -150,7 +157,9 @@ export const digestEvent = internalAction({
       const apiKey =
         preferredProvider === "openai"
           ? apiKeys.openai
-          : apiKeys.anthropic;
+          : preferredProvider === "anthropic"
+          ? apiKeys.anthropic
+          : apiKeys.openrouter;
 
       if (!apiKey) {
         await ctx.runMutation(internal.events.updateStatus, {
@@ -162,7 +171,8 @@ export const digestEvent = internalAction({
       }
 
       // 4. Generate digest
-      const model = getModel(preferredProvider, apiKey);
+      const modelName = preferredProvider === "openrouter" ? apiKeys.openrouterModel : undefined;
+      const model = getModel(preferredProvider, apiKey, modelName);
       const prompt = buildEventPrompt(event);
 
       const { object } = await generateObject({
