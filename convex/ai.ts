@@ -41,7 +41,7 @@ const ImpactAnalysisSchema = z.object({
   ),
   overallRisk: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(100),
-  overallExplanation: z.string().describe("Brief explanation of the overall risk assessment and what the confidence score indicates"),
+  overallExplanation: z.string().describe("Brief explanation starting with 'Overall Assessment:' followed by the overall risk assessment and what the confidence score indicates"),
 });
 
 const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub activity into clear, concise summaries for non-technical stakeholders.
@@ -416,7 +416,7 @@ For each affected surface, determine:
 3. Confidence (0-100) - how certain you are about the risk assessment
 4. Explanation - explain WHY this risk level was assigned and what the confidence means (e.g., "High risk because this component is used across multiple features" or "Medium confidence because the changes are minor but the component is critical")
 
-Also provide an overall risk assessment and explanation for the entire change set.`;
+Also provide an overall risk assessment and explanation for the entire change set. Start the overall explanation with "Overall Assessment:" followed by your analysis.`;
 
           const { object: impact } = await generateObject({
             model,

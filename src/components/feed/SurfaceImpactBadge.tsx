@@ -45,14 +45,6 @@ export function SurfaceImpactBadge({
   return (
     <div className="p-3 rounded-md border bg-card space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
-        {surfaceType && (
-          <Badge
-            variant="outline"
-            className={`text-xs ${surfaceTypeColors[surfaceType]}`}
-          >
-            {surfaceType}
-          </Badge>
-        )}
         <Badge
           variant="outline"
           className={`text-xs ${riskColors[riskLevel]}`}

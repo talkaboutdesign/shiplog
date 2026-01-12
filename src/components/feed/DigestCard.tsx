@@ -8,6 +8,9 @@ import { WhyThisMatters } from "./WhyThisMatters";
 import { ImpactAnalysis } from "./ImpactAnalysis";
 import { usePerspectives } from "@/hooks/usePerspectives";
 import { useEvent } from "@/hooks/useEvent";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { formatDistanceToNow } from "date-fns";
 import type { Digest, Event } from "../../../convex/types";
 
 interface DigestCardProps {
@@ -23,6 +26,12 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
   // Use provided event or fetch it
   const fetchedEvent = useEvent(digest._id);
   const event = eventProp || fetchedEvent;
+  // Fetch repository name if not provided
+  const repository = useQuery(
+    api.repositories.getByIdPublic,
+    repositoryFullName ? "skip" : { repositoryId: digest.repositoryId }
+  );
+  const displayRepositoryName = repositoryFullName || repository?.fullName;
 
   // Determine if digest is still processing
   // Check if recently created and missing expected AI-generated content
@@ -47,6 +56,24 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
+            {/* Timestamp above headline */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="opacity-70"
+              >
+                <circle cx="6" cy="6" r="4.5" />
+                <path d="M6 3v3l2.5 1.5" />
+              </svg>
+              <span>{formatDistanceToNow(new Date(digest.createdAt), { addSuffix: true })}</span>
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
               {isProcessing && !digest.category ? (
                 <div className="flex items-center gap-2">
@@ -57,12 +84,6 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
                 </div>
               ) : (
                 <CardTitle className="text-lg">{digest.title}</CardTitle>
-              )}
-              {/* Show code change indicator for pushes/PRs */}
-              {isCodeChange && (
-                <Badge variant="outline" className="text-xs">
-                  {event.type === "push" ? "Code Push" : "Pull Request"}
-                </Badge>
               )}
             </div>
             {/* Show animated analyzing badge while loading, or show real badges when available */}
@@ -76,30 +97,6 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
             ) : perspectives && perspectives.length > 0 ? (
               <PerspectiveBadges perspectives={perspectives} />
             ) : null}
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Avatar className="h-5 w-5">
-                  <AvatarImage
-                    src={event?.actorAvatarUrl || `https://github.com/${contributor}.png`}
-                    alt={contributor}
-                  />
-                  <AvatarFallback className="text-xs">
-                    {contributor.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <span>@{event?.actorGithubUsername || contributor}</span>
-              </div>
-              {digest.metadata?.branch && (
-                <>
-                  <span>•</span>
-                  <Badge variant="outline" className="text-xs font-mono">
-                    {digest.metadata.branch}
-                  </Badge>
-                </>
-              )}
-              <span>•</span>
-              <TimeAgo timestamp={digest.createdAt} />
-            </div>
           </div>
         </div>
       </CardHeader>
@@ -136,32 +133,84 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
           <WhyThisMatters content={""} isProcessing={true} />
         ) : null}
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {digest.metadata?.prNumber && (
-            <>
-              <span>PR #{digest.metadata.prNumber}</span>
-            </>
-          )}
-          {digest.metadata?.commitCount && (
-            <>
-              {digest.metadata?.prNumber && <span>•</span>}
-              <span>{digest.metadata.commitCount} commit(s)</span>
-            </>
-          )}
-        </div>
-
-        {githubUrl && (
-          <div>
-            <a
-              href={githubUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline"
-            >
-              View on GitHub →
-            </a>
+        {/* Footer with all metadata */}
+        <div className="border-t pt-4 mt-4 space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+            {isCodeChange && displayRepositoryName ? (
+              <>
+                <Badge variant="outline" className="text-xs">
+                  {event.type === "push" ? "Code Push" : "Pull Request"} • {displayRepositoryName}
+                </Badge>
+                <span>•</span>
+              </>
+            ) : isCodeChange ? (
+              <>
+                <Badge variant="outline" className="text-xs">
+                  {event.type === "push" ? "Code Push" : "Pull Request"}
+                </Badge>
+                <span>•</span>
+              </>
+            ) : displayRepositoryName ? (
+              <>
+                <span className="font-medium">{displayRepositoryName}</span>
+                <span>•</span>
+              </>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <Avatar className="h-4 w-4">
+                <AvatarImage
+                  src={event?.actorAvatarUrl || `https://github.com/${contributor}.png`}
+                  alt={contributor}
+                />
+                <AvatarFallback className="text-[10px]">
+                  {contributor.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <a
+                href={`https://github.com/${event?.actorGithubUsername || contributor}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                @{event?.actorGithubUsername || contributor}
+              </a>
+            </div>
+            {digest.metadata?.branch && (
+              <>
+                <span>•</span>
+                <Badge variant="outline" className="text-xs font-mono">
+                  {digest.metadata.branch}
+                </Badge>
+              </>
+            )}
           </div>
-        )}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {digest.metadata?.prNumber && (
+              <>
+                <span>PR #{digest.metadata.prNumber}</span>
+              </>
+            )}
+            {digest.metadata?.commitCount && (
+              <>
+                {digest.metadata?.prNumber && <span>•</span>}
+                <span>{digest.metadata.commitCount} commit(s)</span>
+              </>
+            )}
+            {githubUrl && (
+              <>
+                {(digest.metadata?.prNumber || digest.metadata?.commitCount) && <span>•</span>}
+                <a
+                  href={githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  View on GitHub →
+                </a>
+              </>
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

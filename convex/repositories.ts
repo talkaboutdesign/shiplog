@@ -1,7 +1,7 @@
 import { query, mutation, internalMutation, internalQuery, action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
-import { getCurrentUser } from "./auth";
+import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
 
 export const getByUser = query({
   handler: async (ctx) => {
@@ -294,6 +294,16 @@ export const getById = internalQuery({
   args: { repositoryId: v.id("repositories") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.repositoryId);
+  },
+});
+
+export const getByIdPublic = query({
+  args: { repositoryId: v.id("repositories") },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
+    const repo = await ctx.db.get(args.repositoryId);
+    return repo ? { fullName: repo.fullName } : null;
   },
 });
 
