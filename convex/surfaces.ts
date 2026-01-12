@@ -95,12 +95,24 @@ export const getSurfacesByPaths = internalQuery({
     filePaths: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const surfaces = await ctx.db
-      .query("codeSurfaces")
-      .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId))
-      .collect();
-
-    return surfaces.filter((surface) => args.filePaths.includes(surface.filePath));
+    // Use the by_repository_path index to query each path efficiently
+    // This avoids fetching all surfaces and filtering in memory
+    const surfacePromises = args.filePaths.map((filePath) =>
+      ctx.db
+        .query("codeSurfaces")
+        .withIndex("by_repository_path", (q) =>
+          q.eq("repositoryId", args.repositoryId).eq("filePath", filePath)
+        )
+        .collect()
+    );
+    
+    const surfaceArrays = await Promise.all(surfacePromises);
+    // Flatten and deduplicate (in case of duplicates)
+    const surfaces = surfaceArrays.flat();
+    const uniqueSurfaces = Array.from(
+      new Map(surfaces.map((s) => [s._id, s])).values()
+    );
+    return uniqueSurfaces;
   },
 });
 
@@ -148,6 +160,48 @@ export const create = internalMutation({
       lastSeenAt: now,
       indexedAt: args.indexedAt,
     });
+  },
+});
+
+export const createBatch = internalMutation({
+  args: {
+    repositoryId: v.id("repositories"),
+    surfaces: v.array(
+      v.object({
+        filePath: v.string(),
+        surfaceType: v.union(
+          v.literal("component"),
+          v.literal("service"),
+          v.literal("utility"),
+          v.literal("hook"),
+          v.literal("type"),
+          v.literal("config"),
+          v.literal("other")
+        ),
+        name: v.string(),
+        dependencies: v.array(v.string()),
+        exports: v.optional(v.array(v.string())),
+      }),
+    ),
+    indexedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const ids = [];
+    for (const surface of args.surfaces) {
+      const id = await ctx.db.insert("codeSurfaces", {
+        repositoryId: args.repositoryId,
+        filePath: surface.filePath,
+        surfaceType: surface.surfaceType,
+        name: surface.name,
+        dependencies: surface.dependencies,
+        exports: surface.exports,
+        lastSeenAt: now,
+        indexedAt: args.indexedAt,
+      });
+      ids.push(id);
+    }
+    return ids;
   },
 });
 

@@ -262,16 +262,18 @@ export const indexRepository = internalAction({
         repositoryId: args.repositoryId,
       });
 
-      // Insert new surfaces
+      // Insert new surfaces in batch
       const now = Date.now();
-      for (const surface of surfaces) {
-        await ctx.runMutation(internal.surfaces.create, {
+      if (surfaces.length > 0) {
+        await ctx.runMutation(internal.surfaces.createBatch, {
           repositoryId: args.repositoryId,
-          filePath: surface.filePath,
-          surfaceType: surface.surfaceType,
-          name: surface.name,
-          dependencies: surface.dependencies,
-          exports: surface.exports,
+          surfaces: surfaces.map((s) => ({
+            filePath: s.filePath,
+            surfaceType: s.surfaceType,
+            name: s.name,
+            dependencies: s.dependencies,
+            exports: s.exports,
+          })),
           indexedAt: now,
         });
       }

@@ -194,6 +194,44 @@ export const createPerspective = internalMutation({
   },
 });
 
+export const createPerspectivesBatch = internalMutation({
+  args: {
+    digestId: v.id("digests"),
+    perspectives: v.array(
+      v.object({
+        perspective: v.union(
+          v.literal("bugfix"),
+          v.literal("ui"),
+          v.literal("feature"),
+          v.literal("security"),
+          v.literal("performance"),
+          v.literal("refactor"),
+          v.literal("docs")
+        ),
+        title: v.string(),
+        summary: v.string(),
+        confidence: v.number(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const ids = [];
+    for (const perspective of args.perspectives) {
+      const id = await ctx.db.insert("digestPerspectives", {
+        digestId: args.digestId,
+        perspective: perspective.perspective,
+        title: perspective.title,
+        summary: perspective.summary,
+        confidence: perspective.confidence,
+        createdAt: now,
+      });
+      ids.push(id);
+    }
+    return ids;
+  },
+});
+
 export const getPerspectivesByDigest = query({
   args: { digestId: v.id("digests") },
   handler: async (ctx, args) => {

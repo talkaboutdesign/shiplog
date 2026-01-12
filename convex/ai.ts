@@ -184,7 +184,7 @@ export const digestEvent = internalAction({
     });
 
     try {
-      // 2. Get repository and user
+      // 2. Get repository and user (repository first, then user in parallel with index check)
       const repository = await ctx.runQuery(internal.repositories.getById, {
         repositoryId: event.repositoryId,
       });
@@ -193,9 +193,15 @@ export const digestEvent = internalAction({
         throw new Error("Repository not found");
       }
 
-      const user = await ctx.runQuery(internal.users.getById, {
-        userId: repository.userId,
-      });
+      // Fetch user and check index in parallel since they're independent
+      const [user, indexCheck] = await Promise.all([
+        ctx.runQuery(internal.users.getById, {
+          userId: repository.userId,
+        }),
+        ctx.runAction(internal.surfaces.checkAndIndexIfNeeded, {
+          repositoryId: event.repositoryId,
+        }),
+      ]);
 
       if (!user) {
         throw new Error("User not found");
@@ -229,12 +235,7 @@ export const digestEvent = internalAction({
         return;
       }
 
-      // 4. Check if repository has index, trigger if needed
-      const indexCheck = await ctx.runAction(internal.surfaces.checkAndIndexIfNeeded, {
-        repositoryId: event.repositoryId,
-      });
-
-      // 5. Fetch file diffs if not already stored
+      // 3. Fetch file diffs if not already stored (indexCheck already done above)
       let fileDiffs = event.fileDiffs;
       if (!fileDiffs && (event.type === "push" || event.type === "pull_request")) {
         try {
@@ -289,7 +290,7 @@ export const digestEvent = internalAction({
         }
       }
 
-      // 6. Generate digest with enhanced prompt
+      // 5. Generate digest with enhanced prompt (needed first to determine perspectives)
       const modelName = preferredProvider === "openrouter" ? apiKeys.openrouterModel : undefined;
       const model = getModel(preferredProvider, apiKey, modelName);
       const prompt = buildEventPrompt(event, fileDiffs);
@@ -301,85 +302,7 @@ export const digestEvent = internalAction({
         prompt,
       });
 
-      // 7. Analyze impact if index is available
-      let impactAnalysis = undefined;
-      const repositoryWithIndex = await ctx.runQuery(internal.repositories.getById, {
-        repositoryId: event.repositoryId,
-      });
-      
-      if (repositoryWithIndex?.indexStatus === "completed" && fileDiffs && fileDiffs.length > 0) {
-        try {
-          const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
-            repositoryId: event.repositoryId,
-            filePaths: fileDiffs.map((f) => f.filename),
-          });
-
-          if (surfaces.length > 0) {
-            // Use AI to analyze impact
-            const impactPrompt = `Analyze the impact of these code changes:
-
-Files changed:
-${fileDiffs.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")}
-
-Known code surfaces:
-${surfaces.map((s) => `- ${s.name} (${s.surfaceType}): ${s.filePath}`).join("\n")}
-
-For each affected surface, determine:
-1. Impact type (modified/added/deleted)
-2. Risk level (low/medium/high) - consider: is this a core component? Does it have many dependencies? Is it user-facing?
-3. Confidence (0-100) - how certain you are about the risk assessment
-4. Explanation - explain WHY this risk level was assigned and what the confidence means (e.g., "High risk because this component is used across multiple features" or "Medium confidence because the changes are minor but the component is critical")
-
-Also provide an overall risk assessment and explanation for the entire change set.`;
-
-            const { object: impact } = await generateObject({
-              model,
-              schema: ImpactAnalysisSchema,
-              prompt: impactPrompt,
-            });
-
-            // Map file paths to surface IDs
-            const affectedSurfaces = impact.affectedSurfaces
-              .map((af) => {
-                const surface = surfaces.find((s) => s.filePath === af.filePath);
-                if (!surface) {
-                  return null; // Skip if no matching surface found
-                }
-                return {
-                  surfaceId: surface._id,
-                  surfaceName: af.surfaceName || surface.name,
-                  impactType: af.impactType,
-                  riskLevel: af.riskLevel,
-                  confidence: af.confidence,
-                  explanation: af.explanation,
-                };
-              })
-              .filter((af): af is NonNullable<typeof af> => af !== null);
-
-            if (affectedSurfaces.length > 0) {
-              impactAnalysis = {
-                affectedSurfaces,
-                overallRisk: impact.overallRisk,
-                confidence: impact.confidence,
-                overallExplanation: impact.overallExplanation,
-              };
-            }
-          }
-        } catch (error) {
-          console.error("Error analyzing impact:", error);
-          // Continue without impact analysis
-        }
-      }
-
-      // 8. Generate multi-perspective summaries
-      const perspectives: Array<{
-        perspective: "bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs";
-        title: string;
-        summary: string;
-        confidence: number;
-      }> = [];
-
-      // Determine which perspectives are relevant
+      // 6. Determine which perspectives are relevant (needed before parallel generation)
       const relevantPerspectives: Array<"bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = [];
       
       if (object.category === "bugfix") relevantPerspectives.push("bugfix");
@@ -395,7 +318,17 @@ Also provide an overall risk assessment and explanation for the entire change se
         relevantPerspectives.push(object.category as any || "refactor");
       }
 
-      for (const perspective of relevantPerspectives.slice(0, 3)) { // Limit to 3 perspectives
+      // 7. Prepare for parallel AI generation: fetch surfaces if needed for impact analysis
+      const surfacesPromise = repository.indexStatus === "completed" && fileDiffs && fileDiffs.length > 0
+        ? ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
+            repositoryId: event.repositoryId,
+            filePaths: fileDiffs.map((f) => f.filename),
+          })
+        : Promise.resolve([]);
+
+      // 8. Generate perspectives and impact analysis in parallel
+      const perspectivesToGenerate = relevantPerspectives.slice(0, 3);
+      const perspectivePromises = perspectivesToGenerate.map(async (perspective) => {
         try {
           const perspectivePrompt = `Analyze this code change from a ${perspective} perspective:
 
@@ -409,16 +342,92 @@ Generate a ${perspective}-focused summary.`;
             prompt: perspectivePrompt,
           });
 
-          perspectives.push({
+          return {
             perspective,
             title: persp.title,
             summary: persp.summary,
             confidence: persp.confidence,
-          });
+          };
         } catch (error) {
           console.error(`Error generating ${perspective} perspective:`, error);
+          return null;
         }
-      }
+      });
+
+      // Generate impact analysis in parallel with perspectives
+      const impactAnalysisPromise = (async () => {
+        try {
+          const surfaces = await surfacesPromise;
+          
+          if (surfaces.length === 0 || !fileDiffs || fileDiffs.length === 0) {
+            return undefined;
+          }
+
+          const impactPrompt = `Analyze the impact of these code changes:
+
+Files changed:
+${fileDiffs.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")}
+
+Known code surfaces:
+${surfaces.map((s) => `- ${s.name} (${s.surfaceType}): ${s.filePath}`).join("\n")}
+
+For each affected surface, determine:
+1. Impact type (modified/added/deleted)
+2. Risk level (low/medium/high) - consider: is this a core component? Does it have many dependencies? Is it user-facing?
+3. Confidence (0-100) - how certain you are about the risk assessment
+4. Explanation - explain WHY this risk level was assigned and what the confidence means (e.g., "High risk because this component is used across multiple features" or "Medium confidence because the changes are minor but the component is critical")
+
+Also provide an overall risk assessment and explanation for the entire change set.`;
+
+          const { object: impact } = await generateObject({
+            model,
+            schema: ImpactAnalysisSchema,
+            prompt: impactPrompt,
+          });
+
+          // Map file paths to surface IDs
+          const affectedSurfaces = impact.affectedSurfaces
+            .map((af) => {
+              const surface = surfaces.find((s) => s.filePath === af.filePath);
+              if (!surface) {
+                return null; // Skip if no matching surface found
+              }
+              return {
+                surfaceId: surface._id,
+                surfaceName: af.surfaceName || surface.name,
+                impactType: af.impactType,
+                riskLevel: af.riskLevel,
+                confidence: af.confidence,
+                explanation: af.explanation,
+              };
+            })
+            .filter((af): af is NonNullable<typeof af> => af !== null);
+
+          if (affectedSurfaces.length > 0) {
+            return {
+              affectedSurfaces,
+              overallRisk: impact.overallRisk,
+              confidence: impact.confidence,
+              overallExplanation: impact.overallExplanation,
+            };
+          }
+          return undefined;
+        } catch (error) {
+          console.error("Error analyzing impact:", error);
+          return undefined;
+        }
+      })();
+
+      // Wait for all AI generations to complete in parallel
+      const [perspectiveResults, impactAnalysis] = await Promise.all([
+        Promise.all(perspectivePromises),
+        repository.indexStatus === "completed" ? impactAnalysisPromise : Promise.resolve(undefined),
+      ]);
+
+      // Filter out null results from failed perspective generations
+      const perspectives = perspectiveResults.filter(
+        (p): p is NonNullable<typeof p> => p !== null
+      );
 
       // 9. Extract contributors
       const contributors = [event.actorGithubUsername];
@@ -458,14 +467,16 @@ Generate a ${perspective}-focused summary.`;
         aiModel: preferredProvider,
       });
 
-      // 12. Store perspectives
-      for (const perspective of perspectives) {
-        await ctx.runMutation(internal.digests.createPerspective, {
+      // 11. Store perspectives in batch
+      if (perspectives.length > 0) {
+        await ctx.runMutation(internal.digests.createPerspectivesBatch, {
           digestId,
-          perspective: perspective.perspective,
-          title: perspective.title,
-          summary: perspective.summary,
-          confidence: perspective.confidence,
+          perspectives: perspectives.map((p) => ({
+            perspective: p.perspective,
+            title: p.title,
+            summary: p.summary,
+            confidence: p.confidence,
+          })),
         });
       }
 
