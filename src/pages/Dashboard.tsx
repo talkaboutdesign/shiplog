@@ -3,26 +3,39 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InstallButton } from "@/components/github/InstallButton";
 import { RepoCard } from "@/components/github/RepoCard";
-import { ActivityFeed } from "@/components/feed/ActivityFeed";
 import { FeedFilters, type FeedFilters as FeedFiltersType } from "@/components/feed/FeedFilters";
 import { ApiKeyDrawer } from "@/components/settings/ApiKeyDrawer";
+import { SyncedReposDropdown } from "@/components/github/SyncedReposDropdown";
+import { DigestCard } from "@/components/feed/DigestCard";
+import { EventCard } from "@/components/feed/EventCard";
+import { FeedSkeleton } from "@/components/feed/FeedSkeleton";
+import { EmptyFeed } from "@/components/feed/EmptyFeed";
 import { Button } from "@/components/ui/button";
-import { useRepository } from "@/hooks/useRepository";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useDigests } from "@/hooks/useDigests";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 
 const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG || "shiplog";
 
 export function Dashboard() {
-  const repository = useRepository();
   const user = useCurrentUser();
-  const digests = useDigests(repository?._id);
+  const activeRepos = useQuery(api.repositories.getAllActive);
   const [filters, setFilters] = useState<FeedFiltersType>({
     eventType: "all",
     timeRange: "all",
   });
+
+  // Get digests and events from all active repos
+  const repositoryIds = activeRepos?.map((r) => r._id) || [];
+  const digests = useQuery(
+    api.digests.listByRepositories,
+    repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
+  );
+  const events = useQuery(
+    api.events.listByRepositories,
+    repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
+  );
 
   // Extract unique contributors from digests
   const contributors = digests
@@ -37,7 +50,7 @@ export function Dashboard() {
   const hasApiKey =
     user?.apiKeys?.openai || user?.apiKeys?.anthropic || user?.apiKeys?.openrouter;
 
-  if (repository === undefined || user === undefined) {
+  if (activeRepos === undefined || user === undefined) {
     return (
       <AppShell>
         <div className="container mx-auto max-w-4xl">
@@ -55,10 +68,12 @@ export function Dashboard() {
     );
   }
 
+  const hasRepos = activeRepos.length > 0;
+
   return (
     <AppShell>
       <div className="container mx-auto max-w-4xl space-y-6">
-        {!repository ? (
+        {!hasRepos ? (
           <Card>
             <CardHeader>
               <CardTitle>Welcome to ShipLog</CardTitle>
@@ -76,11 +91,27 @@ export function Dashboard() {
           </Card>
         ) : (
           <>
-            <div className="flex items-center justify-between">
-              <RepoCard repository={repository} />
-              <ApiKeyDrawer>
-                <Button variant="outline">Settings</Button>
-              </ApiKeyDrawer>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                {activeRepos.length === 1 ? (
+                  <RepoCard repository={activeRepos[0]} />
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Synced repositories</CardTitle>
+                      <CardDescription>
+                        {activeRepos.length} {activeRepos.length === 1 ? "repository" : "repositories"} synced
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <SyncedReposDropdown />
+                <ApiKeyDrawer>
+                  <Button variant="outline">Settings</Button>
+                </ApiKeyDrawer>
+              </div>
             </div>
 
             {!hasApiKey && (
@@ -108,12 +139,56 @@ export function Dashboard() {
                   onFiltersChange={setFilters}
                   contributors={contributors}
                 />
-                <ActivityFeed repositoryId={repository._id} />
+                <MultiRepoActivityFeed repositoryIds={repositoryIds} />
               </>
             )}
           </>
         )}
       </div>
     </AppShell>
+  );
+}
+
+function MultiRepoActivityFeed({ repositoryIds }: { repositoryIds: string[] }) {
+  const digests = useQuery(
+    api.digests.listByRepositories,
+    repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
+  );
+  const events = useQuery(
+    api.events.listByRepositories,
+    repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
+  );
+
+  if (digests === undefined || events === undefined) {
+    return <FeedSkeleton />;
+  }
+
+  // Get events that don't have digests (pending, processing, failed, skipped)
+  const eventsWithoutDigests = events.filter(
+    (event) => event.status !== "completed" || !digests.some((d) => d.eventId === event._id)
+  );
+
+  if (digests.length === 0 && eventsWithoutDigests.length === 0) {
+    return <EmptyFeed />;
+  }
+
+  // Combine digests and events, showing events without digests
+  const allItems: Array<{ type: "digest" | "event"; id: string; timestamp: number }> = [
+    ...digests.map((d) => ({ type: "digest" as const, id: d._id, timestamp: d.createdAt })),
+    ...eventsWithoutDigests.map((e) => ({ type: "event" as const, id: e._id, timestamp: e.occurredAt })),
+  ].sort((a, b) => b.timestamp - a.timestamp);
+
+  return (
+    <div className="space-y-4">
+      {allItems.map((item) => {
+        if (item.type === "digest") {
+          const digest = digests.find((d) => d._id === item.id);
+          return digest ? <DigestCard key={digest._id} digest={digest} /> : null;
+        } else {
+          const event = eventsWithoutDigests.find((e) => e._id === item.id);
+          return event ? <EventCard key={event._id} event={event} /> : null;
+        }
+      })}
+    </div>
   );
 }

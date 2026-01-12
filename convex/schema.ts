@@ -36,6 +36,7 @@ export default defineSchema({
     defaultBranch: v.optional(v.string()),
     isPrivate: v.boolean(),
     isActive: v.boolean(),
+    lastSyncedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

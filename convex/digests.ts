@@ -65,6 +65,29 @@ export const listByRepository = query({
   },
 });
 
+export const listByRepositories = query({
+  args: {
+    repositoryIds: v.array(v.id("repositories")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 50;
+    const allDigests = await Promise.all(
+      args.repositoryIds.map((repoId) =>
+        ctx.db
+          .query("digests")
+          .withIndex("by_repository_time", (q) => q.eq("repositoryId", repoId))
+          .order("desc")
+          .collect()
+      )
+    );
+    const flattened = allDigests.flat();
+    return flattened
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  },
+});
+
 export const getByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
