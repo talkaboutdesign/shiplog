@@ -24,16 +24,40 @@ interface ImpactAnalysisProps {
 
 export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessing = false }: ImpactAnalysisProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
+
+  // All hooks must be called before any returns (React hooks rule)
   const indexStatus = useQuery(api.surfaces.getRepositoryIndexStatus, {
     repositoryId,
   });
 
-  // Don't return null - always show container when impactAnalysis exists or when processing
+  const surfaceIds = impactAnalysis?.affectedSurfaces
+    ?.map((s) => s.surfaceId)
+    .filter((id) => id) as Id<"codeSurfaces">[] ?? [];
+
+  const surfaces = useQuery(
+    api.surfaces.getSurfacesByIds,
+    surfaceIds.length > 0 ? { surfaceIds } : "skip"
+  );
+
+  // Now we can have conditional returns
   if (!impactAnalysis && !isProcessing) {
     return null;
   }
 
-  // If processing but no impactAnalysis yet, show header immediately with analyzing state
+  const riskColors = {
+    low: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
+    medium: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
+    high: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
+  };
+
+  // Create a map of surfaceId to surface details
+  const surfaceMap = new Map();
+  if (surfaces) {
+    surfaces.forEach((s) => surfaceMap.set(s._id, s));
+  }
+
+  // Processing state - show header immediately with analyzing state
   if (!impactAnalysis && isProcessing) {
     return (
       <div className="border-t pt-4 mt-4 space-y-4">
@@ -57,53 +81,39 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
           </div>
         </div>
 
-        {/* Changed Files - show immediately if available (from commit data, not AI) */}
+        {/* Changed Files - compact button with expandable list */}
         {event?.fileDiffs && event.fileDiffs.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <span>Changed Files ({event.fileDiffs.length})</span>
-            </div>
-            <div className="space-y-1">
-              {event.fileDiffs.map((file, index) => (
-                <div
-                  key={index}
-                  className="text-sm text-muted-foreground font-mono truncate"
-                >
-                  {file.filename}
-                </div>
-              ))}
-            </div>
+          <div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowFiles(!showFiles)}
+            >
+              {event.fileDiffs.length} file{event.fileDiffs.length !== 1 ? 's' : ''} changed
+              <span className="ml-1">{showFiles ? '▲' : '▼'}</span>
+            </Button>
+            {showFiles && (
+              <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">
+                {event.fileDiffs.map((file, index) => (
+                  <div
+                    key={index}
+                    className="text-xs text-muted-foreground font-mono truncate"
+                  >
+                    {file.filename}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
     );
   }
 
-  // If impactAnalysis exists but no affected surfaces, still show container
+  // If impactAnalysis exists but no affected surfaces, don't show
   if (!impactAnalysis.affectedSurfaces.length) {
     return null;
-  }
-
-  // Fetch surface details for each affected surface
-  const surfaceIds = impactAnalysis.affectedSurfaces
-    .map((s) => s.surfaceId)
-    .filter((id) => id) as Id<"codeSurfaces">[];
-
-  const surfaces = useQuery(
-    api.surfaces.getSurfacesByIds,
-    surfaceIds.length > 0 ? { surfaceIds } : "skip"
-  );
-
-  const riskColors = {
-    low: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
-    medium: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
-    high: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
-  };
-
-  // Create a map of surfaceId to surface details
-  const surfaceMap = new Map();
-  if (surfaces) {
-    surfaces.forEach((s) => surfaceMap.set(s._id, s));
   }
 
   return (
@@ -111,10 +121,10 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
       {/* Index Status */}
       {indexStatus === undefined ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Skeleton className="h-4 w-4" /> {/* Checkmark skeleton */}
-          <Skeleton className="h-4 w-32" /> {/* "Index Status: Indexed" skeleton */}
-          <Skeleton className="h-4 w-24" /> {/* Date skeleton */}
-          <Skeleton className="h-4 w-20" /> {/* Surface count skeleton */}
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-20" />
         </div>
       ) : indexStatus && indexStatus.indexStatus === "completed" ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -191,7 +201,6 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
             {/* Affected Surfaces */}
             <div className="space-y-2">
               {surfaces === undefined ? (
-                // Show skeleton for each affected surface
                 impactAnalysis.affectedSurfaces.map((_, index) => (
                   <Skeleton key={index} className="h-8 w-full" />
                 ))
@@ -220,22 +229,30 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
         )}
       </div>
 
-      {/* Changed Files - always show when available (from commit data, not AI) */}
+      {/* Changed Files - compact button with expandable list */}
       {event?.fileDiffs && event.fileDiffs.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <span>Changed Files ({event.fileDiffs.length})</span>
-          </div>
-          <div className="space-y-1">
-            {event.fileDiffs.map((file, index) => (
-              <div
-                key={index}
-                className="text-sm text-muted-foreground font-mono truncate"
-              >
-                {file.filename}
-              </div>
-            ))}
-          </div>
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setShowFiles(!showFiles)}
+          >
+            {event.fileDiffs.length} file{event.fileDiffs.length !== 1 ? 's' : ''} changed
+            <span className="ml-1">{showFiles ? '▲' : '▼'}</span>
+          </Button>
+          {showFiles && (
+            <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">
+              {event.fileDiffs.map((file, index) => (
+                <div
+                  key={index}
+                  className="text-xs text-muted-foreground font-mono truncate"
+                >
+                  {file.filename}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
