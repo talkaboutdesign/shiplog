@@ -1,6 +1,8 @@
 import { mutation, internalMutation, query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
+import { Id } from "./_generated/dataModel";
 
 export const create = internalMutation({
   args: {
@@ -77,7 +79,17 @@ export const updateStatus = internalMutation({
 export const get = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.eventId);
+    const user = await getCurrentUser(ctx);
+    const event = await ctx.db.get(args.eventId);
+    
+    if (!event) {
+      throw new Error("Event not found");
+    }
+    
+    // Verify the event belongs to a repository owned by the user
+    await verifyRepositoryOwnership(ctx, event.repositoryId, user._id);
+    
+    return event;
   },
 });
 
@@ -94,6 +106,11 @@ export const listByRepository = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Verify repository ownership before querying events
+    await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
+    
     const limit = args.limit || 50;
     return await ctx.db
       .query("events")
@@ -111,9 +128,27 @@ export const listByRepositories = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Filter repositoryIds to only include those owned by the user
+    const ownedRepositoryIds: Id<"repositories">[] = [];
+    for (const repoId of args.repositoryIds) {
+      try {
+        await verifyRepositoryOwnership(ctx, repoId, user._id);
+        ownedRepositoryIds.push(repoId);
+      } catch {
+        // Skip repositories the user doesn't own
+        continue;
+      }
+    }
+    
+    if (ownedRepositoryIds.length === 0) {
+      return [];
+    }
+    
     const limit = args.limit || 50;
     const allEvents = await Promise.all(
-      args.repositoryIds.map((repoId) =>
+      ownedRepositoryIds.map((repoId) =>
         ctx.db
           .query("events")
           .withIndex("by_repository_time", (q) => q.eq("repositoryId", repoId))

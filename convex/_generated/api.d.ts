@@ -9,6 +9,7 @@
  */
 
 import type * as ai from "../ai.js";
+import type * as auth from "../auth.js";
 import type * as digests from "../digests.js";
 import type * as events from "../events.js";
 import type * as github from "../github.js";
@@ -26,6 +27,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  auth: typeof auth;
   digests: typeof digests;
   events: typeof events;
   github: typeof github;

@@ -1,6 +1,7 @@
 import { query, mutation, internalMutation, internalQuery, action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
+import { getCurrentUser } from "./auth";
 
 export const getByUser = query({
   handler: async (ctx) => {
@@ -205,12 +206,34 @@ export const refreshRepos = action({
 export const getByInstallation = query({
   args: { installationId: v.number() },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Verify the installation belongs to the user by checking if they have any repos with this installation
+    const userRepos = await ctx.db
+      .query("repositories")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    const hasInstallation = userRepos.some(
+      (repo) => repo.githubInstallationId === args.installationId
+    );
+    
+    if (!hasInstallation) {
+      throw new Error("Installation not found or unauthorized");
+    }
+    
+    // Return the first active repository with this installation that belongs to the user
     return await ctx.db
       .query("repositories")
       .withIndex("by_installation", (q) =>
         q.eq("githubInstallationId", args.installationId)
       )
-      .filter((q) => q.eq(q.field("isActive"), true))
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("isActive"), true),
+          q.eq(q.field("userId"), user._id)
+        )
+      )
       .first();
   },
 });

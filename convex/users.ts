@@ -1,18 +1,18 @@
 import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { getCurrentUser } from "./auth";
 
 export const get = query({
   args: { clerkId: v.string() },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
+    const currentUser = await getCurrentUser(ctx);
+    
+    // Only allow users to query their own clerkId to prevent user enumeration
+    if (currentUser.clerkId !== args.clerkId) {
       throw new Error("Unauthorized");
     }
 
-    return await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    return currentUser;
   },
 });
 

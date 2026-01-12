@@ -1,5 +1,7 @@
 import { query, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
+import { Id } from "./_generated/dataModel";
 
 export const create = internalMutation({
   args: {
@@ -53,6 +55,11 @@ export const listByRepository = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Verify repository ownership before querying digests
+    await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
+    
     const limit = args.limit || 50;
 
     return await ctx.db
@@ -71,9 +78,27 @@ export const listByRepositories = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Filter repositoryIds to only include those owned by the user
+    const ownedRepositoryIds: Id<"repositories">[] = [];
+    for (const repoId of args.repositoryIds) {
+      try {
+        await verifyRepositoryOwnership(ctx, repoId, user._id);
+        ownedRepositoryIds.push(repoId);
+      } catch {
+        // Skip repositories the user doesn't own
+        continue;
+      }
+    }
+    
+    if (ownedRepositoryIds.length === 0) {
+      return [];
+    }
+    
     const limit = args.limit || 50;
     const allDigests = await Promise.all(
-      args.repositoryIds.map((repoId) =>
+      ownedRepositoryIds.map((repoId) =>
         ctx.db
           .query("digests")
           .withIndex("by_repository_time", (q) => q.eq("repositoryId", repoId))
@@ -91,6 +116,17 @@ export const listByRepositories = query({
 export const getByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Get the event to check repository ownership
+    const event = await ctx.db.get(args.eventId);
+    if (!event) {
+      throw new Error("Event not found");
+    }
+    
+    // Verify the event belongs to a repository owned by the user
+    await verifyRepositoryOwnership(ctx, event.repositoryId, user._id);
+    
     return await ctx.db
       .query("digests")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
