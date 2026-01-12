@@ -1,5 +1,11 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { GitHubEventType } from "../../../convex/types";
 
 export interface FeedFilters {
@@ -29,7 +35,7 @@ export function FeedFilters({
   const handleContributorChange = (value: string) => {
     onFiltersChange({
       ...filters,
-      contributor: value || undefined,
+      contributor: value === "all" ? undefined : value,
     });
   };
 
@@ -52,27 +58,32 @@ export function FeedFilters({
 
       {contributors.length > 0 && (
         <Select
-          value={filters.contributor || ""}
-          onChange={(e) => handleContributorChange(e.target.value)}
-          className="w-auto"
+          value={filters.contributor || "all"}
+          onValueChange={handleContributorChange}
         >
-          <option value="">All contributors</option>
-          {contributors.map((contributor) => (
-            <option key={contributor} value={contributor}>
-              {contributor}
-            </option>
-          ))}
+          <SelectTrigger className="w-auto min-w-[140px]">
+            <SelectValue placeholder="All contributors" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All contributors</SelectItem>
+            {contributors.map((contributor) => (
+              <SelectItem key={contributor} value={contributor}>
+                {contributor}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
       )}
 
-      <Select
-        value={filters.timeRange}
-        onChange={(e) => handleTimeRangeChange(e.target.value)}
-        className="w-auto"
-      >
-        <option value="24h">Last 24 hours</option>
-        <option value="7d">Last 7 days</option>
-        <option value="all">All time</option>
+      <Select value={filters.timeRange} onValueChange={handleTimeRangeChange}>
+        <SelectTrigger className="w-auto min-w-[140px]">
+          <SelectValue placeholder="Time range" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="24h">Last 24 hours</SelectItem>
+          <SelectItem value="7d">Last 7 days</SelectItem>
+          <SelectItem value="all">All time</SelectItem>
+        </SelectContent>
       </Select>
     </div>
   );
