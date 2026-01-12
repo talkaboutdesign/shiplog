@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-light: #ffffff;
+  --color-dark: #171717;
+  --color-background: var(--color-light);
+  --color-foreground: var(--color-dark);
+  --color-muted: #f4f4f5;
+  --color-muted-foreground: #71717a;
+  --color-primary: #2563eb;
+  --color-primary-foreground: #ffffff;
+  --color-card: #ffffff;
+  --color-card-foreground: var(--color-dark);
+  --color-border: #e4e4e7;
+  --color-input: #e4e4e7;
+  --color-ring: #3b82f6;
+  --color-accent: #f4f4f5;
+  --color-accent-foreground: var(--color-dark);
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-background: #09090b;
+    --color-foreground: #fafafa;
+    --color-muted: #27272a;
+    --color-muted-foreground: #a1a1aa;
+    --color-primary: #3b82f6;
+    --color-primary-foreground: #ffffff;
+    --color-card: #18181b;
+    --color-card-foreground: #fafafa;
+    --color-border: #27272a;
+    --color-input: #27272a;
+    --color-ring: #3b82f6;
+    --color-accent: #27272a;
+    --color-accent-foreground: #fafafa;
+    --color-destructive: #7f1d1d;
+    --color-destructive-foreground: #ffffff;
+  }
+}
+
+body {
+  color: var(--color-foreground);
+  background: var(--color-background);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
