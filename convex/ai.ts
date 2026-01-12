@@ -235,7 +235,51 @@ export const digestEvent = internalAction({
         return;
       }
 
-      // 3. Fetch file diffs if not already stored (indexCheck already done above)
+      // 3. Extract metadata immediately (available synchronously from event payload)
+      const contributors = [event.actorGithubUsername];
+      const metadata: any = {};
+      if (event.type === "pull_request") {
+        const pr = event.payload.pull_request;
+        if (pr) {
+          metadata.prNumber = pr.number;
+          metadata.prUrl = pr.html_url;
+          metadata.prState = pr.state;
+        }
+      } else if (event.type === "issues") {
+        const issue = event.payload.issue;
+        if (issue) {
+          metadata.issueNumber = issue.number;
+          metadata.issueUrl = issue.html_url;
+        }
+      } else if (event.type === "push") {
+        metadata.commitCount = event.payload.commits?.length || 0;
+        metadata.compareUrl = event.payload.compare;
+        metadata.branch = event.payload.ref?.replace("refs/heads/", "");
+      }
+
+      // 4. Create digest placeholder immediately with available data
+      const placeholderTitle = event.type === "push" 
+        ? `Push: ${metadata.commitCount || 0} commit(s)`
+        : event.type === "pull_request"
+        ? event.payload.pull_request?.title || "Pull Request"
+        : event.type === "issues"
+        ? event.payload.issue?.title || "Issue"
+        : "Processing event...";
+
+      const digestId = await ctx.runMutation(internal.digests.create, {
+        repositoryId: event.repositoryId,
+        eventId: args.eventId,
+        title: placeholderTitle,
+        summary: "Analyzing changes...",
+        category: undefined,
+        contributors,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+        aiModel: preferredProvider,
+        whyThisMatters: undefined,
+        impactAnalysis: undefined,
+      });
+
+      // 5. Fetch file diffs if not already stored (indexCheck already done above)
       let fileDiffs = event.fileDiffs;
       if (!fileDiffs && (event.type === "push" || event.type === "pull_request")) {
         try {
@@ -302,7 +346,16 @@ export const digestEvent = internalAction({
         prompt,
       });
 
-      // 6. Determine which perspectives are relevant (needed before parallel generation)
+      // 6. Update digest with AI-generated content (title, summary, category, whyThisMatters)
+      await ctx.runMutation(internal.digests.update, {
+        digestId,
+        title: object.title,
+        summary: object.summary,
+        category: object.category,
+        whyThisMatters: object.whyThisMatters,
+      });
+
+      // 7. Determine which perspectives are relevant (needed before parallel generation)
       const relevantPerspectives: Array<"bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = [];
       
       if (object.category === "bugfix") relevantPerspectives.push("bugfix");
@@ -429,45 +482,15 @@ Also provide an overall risk assessment and explanation for the entire change se
         (p): p is NonNullable<typeof p> => p !== null
       );
 
-      // 9. Extract contributors
-      const contributors = [event.actorGithubUsername];
-
-      // 10. Build metadata
-      const metadata: any = {};
-      if (event.type === "pull_request") {
-        const pr = event.payload.pull_request;
-        if (pr) {
-          metadata.prNumber = pr.number;
-          metadata.prUrl = pr.html_url;
-          metadata.prState = pr.state;
-        }
-      } else if (event.type === "issues") {
-        const issue = event.payload.issue;
-        if (issue) {
-          metadata.issueNumber = issue.number;
-          metadata.issueUrl = issue.html_url;
-        }
-      } else if (event.type === "push") {
-        metadata.commitCount = event.payload.commits?.length || 0;
-        metadata.compareUrl = event.payload.compare;
-        metadata.branch = event.payload.ref?.replace("refs/heads/", "");
+      // 8. Update digest with impact analysis if available
+      if (impactAnalysis) {
+        await ctx.runMutation(internal.digests.update, {
+          digestId,
+          impactAnalysis,
+        });
       }
 
-      // 11. Store digest
-      const digestId = await ctx.runMutation(internal.digests.create, {
-        repositoryId: event.repositoryId,
-        eventId: args.eventId,
-        title: object.title,
-        summary: object.summary,
-        category: object.category,
-        whyThisMatters: object.whyThisMatters,
-        contributors,
-        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-        impactAnalysis,
-        aiModel: preferredProvider,
-      });
-
-      // 11. Store perspectives in batch
+      // 9. Store perspectives in batch
       if (perspectives.length > 0) {
         await ctx.runMutation(internal.digests.createPerspectivesBatch, {
           digestId,

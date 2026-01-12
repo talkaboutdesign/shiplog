@@ -81,6 +81,81 @@ export const create = internalMutation({
   },
 });
 
+export const update = internalMutation({
+  args: {
+    digestId: v.id("digests"),
+    title: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    category: v.optional(
+      v.union(
+        v.literal("feature"),
+        v.literal("bugfix"),
+        v.literal("refactor"),
+        v.literal("docs"),
+        v.literal("chore"),
+        v.literal("security")
+      )
+    ),
+    whyThisMatters: v.optional(v.string()),
+    impactAnalysis: v.optional(
+      v.object({
+        affectedSurfaces: v.array(
+          v.object({
+            surfaceId: v.id("codeSurfaces"),
+            surfaceName: v.string(),
+            impactType: v.union(
+              v.literal("modified"),
+              v.literal("added"),
+              v.literal("deleted")
+            ),
+            riskLevel: v.union(
+              v.literal("low"),
+              v.literal("medium"),
+              v.literal("high")
+            ),
+            confidence: v.number(),
+            explanation: v.optional(v.string()),
+          })
+        ),
+        overallRisk: v.union(
+          v.literal("low"),
+          v.literal("medium"),
+          v.literal("high")
+        ),
+        confidence: v.number(),
+        overallExplanation: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const update: {
+      title?: string;
+      summary?: string;
+      category?: "feature" | "bugfix" | "refactor" | "docs" | "chore" | "security";
+      whyThisMatters?: string;
+      impactAnalysis?: any;
+    } = {};
+
+    if (args.title !== undefined) {
+      update.title = args.title;
+    }
+    if (args.summary !== undefined) {
+      update.summary = args.summary;
+    }
+    if (args.category !== undefined) {
+      update.category = args.category;
+    }
+    if (args.whyThisMatters !== undefined) {
+      update.whyThisMatters = args.whyThisMatters;
+    }
+    if (args.impactAnalysis !== undefined) {
+      update.impactAnalysis = args.impactAnalysis;
+    }
+
+    await ctx.db.patch(args.digestId, update);
+  },
+});
+
 export const listByRepository = query({
   args: {
     repositoryId: v.id("repositories"),
