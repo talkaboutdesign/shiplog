@@ -140,6 +140,13 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
             </span>
           </div>
         </Button>
+        {/* Show subtle loading indicator when collapsed and content is loading */}
+        {!isExpanded && isProcessing && (surfaces === undefined || !impactAnalysis.overallExplanation) && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Skeleton className="h-3 w-3 rounded-full animate-pulse" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+        )}
 
         {/* Overall Explanation */}
         {isExpanded && (

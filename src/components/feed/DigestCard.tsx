@@ -27,12 +27,17 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
   // Determine if digest is still processing
   // Check if recently created and missing expected AI-generated content
   const digestAge = Date.now() - digest.createdAt;
-  const isRecentlyCreated = digestAge < 60000; // 1 minute
+  const isRecentlyCreated = digestAge < 120000; // 2 minutes - extended window for AI content
   const hasBasicContent = digest.summary && digest.summary !== "Analyzing changes..." && digest.category;
+  
+  // Check if specific content is missing (regardless of time for recently created digests)
+  const isMissingWhyThisMatters = !digest.whyThisMatters && isRecentlyCreated;
+  const isMissingImpactAnalysis = !digest.impactAnalysis && isRecentlyCreated;
+  
   const isProcessing = 
     digest.summary === "Analyzing changes..." || 
     (isRecentlyCreated && !hasBasicContent) ||
-    (hasBasicContent && isRecentlyCreated && !digest.whyThisMatters && !digest.impactAnalysis);
+    (hasBasicContent && (isMissingWhyThisMatters || isMissingImpactAnalysis));
 
   // Determine event type for UI differentiation
   const isCodeChange = event?.type === "push" || event?.type === "pull_request";
@@ -113,9 +118,9 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
             impactAnalysis={digest.impactAnalysis}
             repositoryId={digest.repositoryId}
             event={event ? { fileDiffs: event.fileDiffs } : undefined}
-            isProcessing={isProcessing}
+            isProcessing={isMissingImpactAnalysis}
           />
-        ) : isProcessing ? (
+        ) : isMissingImpactAnalysis ? (
           <ImpactAnalysis
             impactAnalysis={undefined}
             repositoryId={digest.repositoryId}
@@ -126,12 +131,8 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
 
         {digest.whyThisMatters ? (
           <WhyThisMatters content={digest.whyThisMatters} />
-        ) : isProcessing ? (
-          <div className="border-t pt-4 mt-4 space-y-2">
-            <Skeleton className="h-6 w-40" /> {/* "Why this matters" button skeleton */}
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-          </div>
+        ) : isMissingWhyThisMatters ? (
+          <WhyThisMatters content={""} isProcessing={true} />
         ) : null}
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
