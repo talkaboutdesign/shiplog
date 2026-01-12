@@ -148,7 +148,7 @@ export default defineSchema({
               v.literal("high")
             ),
             confidence: v.number(),
-            explanation: v.string(),
+            explanation: v.optional(v.string()),
           })
         ),
         overallRisk: v.union(
