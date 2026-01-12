@@ -1,7 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiKeyDrawer } from "@/components/settings/ApiKeyDrawer";
@@ -13,12 +12,14 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useSelectedRepo } from "@/hooks/useSelectedRepo";
 import { getPeriodForTimestamp } from "@/lib/periodUtils";
 import { InstallButton } from "@/components/github/InstallButton";
+import { useHeaderActions } from "@/components/layout/HeaderActionsContext";
 
 const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG || "shiplog";
 
 export function Summary() {
   const user = useCurrentUser();
   const { repos: activeRepos, selectedRepo, selectedRepoId, isLoading: reposLoading } = useSelectedRepo();
+  const { setHeaderActions } = useHeaderActions();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("weekly");
   const generateSummary = useAction(api.summaries.generateSummaryOnDemandPublic);
   const updateSummary = useAction(api.summaries.updateSummaryPublic);
@@ -167,31 +168,34 @@ export function Summary() {
     setProcessingPeriods(new Set());
   }, [selectedRepoId]);
 
+  // Set header actions
+  useEffect(() => {
+    const hasRepos = activeRepos && activeRepos.length > 0;
+    const headerActions = hasRepos ? (
+      <ApiKeyDrawer>
+        <Button variant="outline" size="sm">Settings</Button>
+      </ApiKeyDrawer>
+    ) : null;
+    setHeaderActions(headerActions);
+  }, [activeRepos, setHeaderActions]);
+
   if (reposLoading || user === undefined) {
     return (
-      <AppShell>
-        <div className="container mx-auto max-w-4xl">
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-64 mt-2" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-4 w-full" />
-            </CardContent>
-          </Card>
-        </div>
-      </AppShell>
+      <div className="container mx-auto max-w-4xl">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-4 w-full" />
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   const hasRepos = activeRepos && activeRepos.length > 0;
-
-  const headerActions = hasRepos ? (
-    <ApiKeyDrawer>
-      <Button variant="outline" size="sm">Settings</Button>
-    </ApiKeyDrawer>
-  ) : null;
 
   // Render content for a period tab
   const renderPeriodContent = (period: PeriodType) => {
@@ -265,60 +269,58 @@ export function Summary() {
   };
 
   return (
-    <AppShell headerActions={headerActions}>
-      <div className="container mx-auto max-w-4xl space-y-6">
-        {!hasRepos ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Welcome to ShipLog</CardTitle>
-              <CardDescription>
-                Connect your GitHub repository to get started
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-muted-foreground">
-                Install the ShipLog GitHub App to connect your repository and
-                start receiving AI-powered activity summaries.
-              </p>
-              <InstallButton appSlug={GITHUB_APP_SLUG} />
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {!hasApiKey && (
-              <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
-                <CardHeader>
-                  <CardTitle className="text-yellow-900 dark:text-yellow-100">
-                    Setup Required
-                  </CardTitle>
-                  <CardDescription className="text-yellow-800 dark:text-yellow-200">
-                    Configure your AI API key to generate summary reports
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ApiKeyDrawer>
-                    <Button>Configure API Keys</Button>
-                  </ApiKeyDrawer>
-                </CardContent>
-              </Card>
-            )}
+    <div className="container mx-auto max-w-4xl space-y-6">
+      {!hasRepos ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Welcome to ShipLog</CardTitle>
+            <CardDescription>
+              Connect your GitHub repository to get started
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">
+              Install the ShipLog GitHub App to connect your repository and
+              start receiving AI-powered activity summaries.
+            </p>
+            <InstallButton appSlug={GITHUB_APP_SLUG} />
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {!hasApiKey && (
+            <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+              <CardHeader>
+                <CardTitle className="text-yellow-900 dark:text-yellow-100">
+                  Setup Required
+                </CardTitle>
+                <CardDescription className="text-yellow-800 dark:text-yellow-200">
+                  Configure your AI API key to generate summary reports
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ApiKeyDrawer>
+                  <Button>Configure API Keys</Button>
+                </ApiKeyDrawer>
+              </CardContent>
+            </Card>
+          )}
 
-            {hasApiKey && selectedRepoId && (
-              <SummaryTabs value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                  <TabsContent value="daily">
-                    {renderPeriodContent("daily")}
-                  </TabsContent>
-                  <TabsContent value="weekly">
-                    {renderPeriodContent("weekly")}
-                  </TabsContent>
-                  <TabsContent value="monthly">
-                    {renderPeriodContent("monthly")}
-                  </TabsContent>
-                </SummaryTabs>
-            )}
-          </>
-        )}
-      </div>
-    </AppShell>
+          {hasApiKey && selectedRepoId && (
+            <SummaryTabs value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <TabsContent value="daily">
+                  {renderPeriodContent("daily")}
+                </TabsContent>
+                <TabsContent value="weekly">
+                  {renderPeriodContent("weekly")}
+                </TabsContent>
+                <TabsContent value="monthly">
+                  {renderPeriodContent("monthly")}
+                </TabsContent>
+              </SummaryTabs>
+          )}
+        </>
+      )}
+    </div>
   );
 }

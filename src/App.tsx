@@ -1,5 +1,6 @@
 "use client";
 
+import { Routes, Route } from "react-router-dom";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { SignInButton } from "@clerk/clerk-react";
 import { Summary } from "./pages/Summary";
@@ -7,24 +8,20 @@ import { Feed } from "./pages/Feed";
 import { GitHubCallback } from "./pages/GitHubCallback";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 import { SelectedRepoProvider } from "./hooks/useSelectedRepo";
+import { Layout } from "./components/layout/Layout";
 
 export default function App() {
-  // Check route
-  const path = window.location.pathname;
-  const isCallback = path === "/github/callback";
-  const isFeed = path === "/feed";
-
   return (
     <>
       <Authenticated>
         <SelectedRepoProvider>
-          {isCallback ? (
-            <GitHubCallback />
-          ) : isFeed ? (
-            <FeedWrapper />
-          ) : (
-            <SummaryWrapper />
-          )}
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="/github/callback" element={<GitHubCallback />} />
+              <Route path="/feed" element={<FeedWrapper />} />
+              <Route path="/" element={<SummaryWrapper />} />
+            </Route>
+          </Routes>
         </SelectedRepoProvider>
       </Authenticated>
       <Unauthenticated>

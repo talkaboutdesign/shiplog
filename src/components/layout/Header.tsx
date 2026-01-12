@@ -1,3 +1,4 @@
+import { Link, useLocation } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
 import { RepoSelector } from "./RepoSelector";
@@ -7,7 +8,8 @@ interface HeaderProps {
 }
 
 export function Header({ actions }: HeaderProps) {
-  const path = window.location.pathname;
+  const location = useLocation();
+  const path = location.pathname;
   const isSummary = path === "/";
   const isFeed = path === "/feed";
 
@@ -17,8 +19,8 @@ export function Header({ actions }: HeaderProps) {
         <div className="flex items-center gap-6">
           <h1 className="text-xl font-bold">ShipLog</h1>
           <nav className="flex items-center gap-4">
-            <a
-              href="/"
+            <Link
+              to="/"
               className={cn(
                 "text-sm font-medium transition-colors hover:text-primary",
                 isSummary
@@ -27,9 +29,9 @@ export function Header({ actions }: HeaderProps) {
               )}
             >
               Summary
-            </a>
-            <a
-              href="/feed"
+            </Link>
+            <Link
+              to="/feed"
               className={cn(
                 "text-sm font-medium transition-colors hover:text-primary",
                 isFeed
@@ -38,7 +40,7 @@ export function Header({ actions }: HeaderProps) {
               )}
             >
               Feed
-            </a>
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3">

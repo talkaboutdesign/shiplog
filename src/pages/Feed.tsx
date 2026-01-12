@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { AppShell } from "@/components/layout/AppShell";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InstallButton } from "@/components/github/InstallButton";
 import { FeedFilters, type FeedFilters as FeedFiltersType } from "@/components/feed/FeedFilters";
@@ -13,12 +12,14 @@ import { api } from "../../convex/_generated/api";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useSelectedRepo } from "@/hooks/useSelectedRepo";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useHeaderActions } from "@/components/layout/HeaderActionsContext";
 
 const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG || "shiplog";
 
 export function Feed() {
   const user = useCurrentUser();
   const { repos: activeRepos, selectedRepoId, isLoading: reposLoading } = useSelectedRepo();
+  const { setHeaderActions } = useHeaderActions();
   const [filters, setFilters] = useState<FeedFiltersType>({
     eventType: "all",
     timeRange: "all",
@@ -47,34 +48,36 @@ export function Feed() {
   const hasApiKey =
     user?.apiKeys?.openai || user?.apiKeys?.anthropic || user?.apiKeys?.openrouter;
 
+  // Set header actions
+  useEffect(() => {
+    const hasRepos = activeRepos && activeRepos.length > 0;
+    const headerActions = hasRepos ? (
+      <ApiKeyDrawer>
+        <Button variant="outline" size="sm">Settings</Button>
+      </ApiKeyDrawer>
+    ) : null;
+    setHeaderActions(headerActions);
+  }, [activeRepos, setHeaderActions]);
+
   if (reposLoading || user === undefined) {
     return (
-      <AppShell>
-        <div className="container mx-auto max-w-4xl">
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-64 mt-2" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-4 w-full" />
-            </CardContent>
-          </Card>
-        </div>
-      </AppShell>
+      <div className="container mx-auto max-w-4xl">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-4 w-full" />
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   const hasRepos = activeRepos && activeRepos.length > 0;
 
-  const headerActions = hasRepos ? (
-    <ApiKeyDrawer>
-      <Button variant="outline" size="sm">Settings</Button>
-    </ApiKeyDrawer>
-  ) : null;
-
   return (
-    <AppShell headerActions={headerActions}>
       <div className="container mx-auto max-w-4xl space-y-6">
         {!hasRepos ? (
           <Card>
@@ -132,7 +135,6 @@ export function Feed() {
           </>
         )}
       </div>
-    </AppShell>
   );
 }
 
