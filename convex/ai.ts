@@ -86,12 +86,29 @@ function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: strin
     const anthropic = createAnthropic({ apiKey });
     return anthropic("claude-3-5-haiku-latest");
   } else {
-    // openrouter - use OpenAI SDK provider with OpenRouter baseURL
+    // openrouter
+    const model = modelName || "openai/gpt-4o-mini";
+    
+    // For Anthropic models through OpenRouter, use Anthropic SDK with OpenRouter baseURL
+    // This ensures proper structured output support (tool calling works correctly)
+    // Reference: https://ai-sdk.dev/docs/guides/providers/anthropic
+    if (model.startsWith("anthropic/")) {
+      const anthropic = createAnthropic({
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      });
+      // Keep the full model name with prefix when using OpenRouter
+      // OpenRouter expects the full model identifier (e.g., "anthropic/claude-3-5-haiku")
+      return anthropic(model);
+    }
+    
+    // For OpenAI and other models, use OpenAI SDK provider with OpenRouter baseURL
+    // Reference: https://openrouter.ai/docs/quickstart
     const openrouter = createOpenAI({ 
       apiKey,
       baseURL: "https://openrouter.ai/api/v1",
     });
-    return openrouter(modelName || "openai/gpt-4o-mini");
+    return openrouter(model);
   }
 }
 
