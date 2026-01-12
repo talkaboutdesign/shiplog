@@ -7,7 +7,6 @@ import { FeedFilters, type FeedFilters as FeedFiltersType } from "@/components/f
 import { ApiKeyDrawer } from "@/components/settings/ApiKeyDrawer";
 import { SyncedReposDropdown } from "@/components/github/SyncedReposDropdown";
 import { DigestCard } from "@/components/feed/DigestCard";
-import { EventCard } from "@/components/feed/EventCard";
 import { FeedSkeleton } from "@/components/feed/FeedSkeleton";
 import { EmptyFeed } from "@/components/feed/EmptyFeed";
 import { Button } from "@/components/ui/button";
@@ -268,32 +267,19 @@ function MultiRepoActivityFeed({
     return seenEventIds.has(event._id);
   });
 
-  // Get events that don't have digests (pending, processing, failed, skipped)
-  const eventsWithoutDigests = filteredEvents.filter(
-    (event) => event.status !== "completed" || !deduplicatedDigests.some((d) => d.eventId === event._id)
-  );
-
-  if (deduplicatedDigests.length === 0 && eventsWithoutDigests.length === 0) {
+  // Only show digests - events are backend-only triggers
+  if (deduplicatedDigests.length === 0) {
     return <EmptyFeed />;
   }
 
-  // Combine digests and events, showing events without digests
-  const allItems: Array<{ type: "digest" | "event"; id: string; timestamp: number }> = [
-    ...deduplicatedDigests.map((d) => ({ type: "digest" as const, id: d._id, timestamp: d.createdAt })),
-    ...eventsWithoutDigests.map((e) => ({ type: "event" as const, id: e._id, timestamp: e.occurredAt })),
-  ].sort((a, b) => b.timestamp - a.timestamp);
+  // Sort digests by creation time (newest first)
+  const sortedDigests = [...deduplicatedDigests].sort((a, b) => b.createdAt - a.createdAt);
 
   return (
     <div className="space-y-4">
-      {allItems.map((item) => {
-        if (item.type === "digest") {
-          const digest = deduplicatedDigests.find((d) => d._id === item.id);
-          const event = digest ? eventMap.get(digest.eventId) : undefined;
-          return digest ? <DigestCard key={digest._id} digest={digest} event={event} /> : null;
-        } else {
-          const event = eventsWithoutDigests.find((e) => e._id === item.id);
-          return event ? <EventCard key={event._id} event={event} /> : null;
-        }
+      {sortedDigests.map((digest) => {
+        const event = eventMap.get(digest.eventId);
+        return <DigestCard key={digest._id} digest={digest} event={event} />;
       })}
     </div>
   );

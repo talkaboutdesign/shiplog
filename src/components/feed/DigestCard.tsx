@@ -24,10 +24,15 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
   const fetchedEvent = useEvent(digest._id);
   const event = eventProp || fetchedEvent;
 
-  // Check if digest is still being processed (has placeholder data)
-  const isProcessing = digest.summary === "Analyzing changes..." || 
-    digest.title.includes("Processing") || 
-    digest.title.includes("Push:") && !digest.category;
+  // Determine if digest is still processing
+  // Check if recently created and missing expected AI-generated content
+  const digestAge = Date.now() - digest.createdAt;
+  const isRecentlyCreated = digestAge < 60000; // 1 minute
+  const hasBasicContent = digest.summary && digest.summary !== "Analyzing changes..." && digest.category;
+  const isProcessing = 
+    digest.summary === "Analyzing changes..." || 
+    (isRecentlyCreated && !hasBasicContent) ||
+    (hasBasicContent && isRecentlyCreated && !digest.whyThisMatters && !digest.impactAnalysis);
 
   // Determine event type for UI differentiation
   const isCodeChange = event?.type === "push" || event?.type === "pull_request";
@@ -55,10 +60,16 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
                 </Badge>
               )}
             </div>
-            {/* Only show perspective badges, show nothing if no perspectives exist */}
-            {perspectives && perspectives.length > 0 && (
+            {/* Show skeleton for perspectives while loading, or show real badges when available */}
+            {isProcessing && perspectives === undefined ? (
+              <div className="flex gap-2 flex-wrap">
+                <Skeleton className="h-5 w-20 rounded-full" />
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+            ) : perspectives && perspectives.length > 0 ? (
               <PerspectiveBadges perspectives={perspectives} />
-            )}
+            ) : null}
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Avatar className="h-5 w-5">
@@ -97,17 +108,36 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
           </div>
         )}
 
-        {digest.impactAnalysis && (
+        {digest.impactAnalysis ? (
           <ImpactAnalysis
             impactAnalysis={digest.impactAnalysis}
             repositoryId={digest.repositoryId}
             event={event ? { fileDiffs: event.fileDiffs } : undefined}
           />
-        )}
+        ) : isProcessing ? (
+          <div className="border-t pt-4 mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-6 w-48" /> {/* "AI-Detected Impact" header */}
+              <Skeleton className="h-6 w-24" /> {/* Risk badge */}
+            </div>
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <div className="space-y-2 mt-3">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-5/6" />
+            </div>
+          </div>
+        ) : null}
 
-        {digest.whyThisMatters && (
+        {digest.whyThisMatters ? (
           <WhyThisMatters content={digest.whyThisMatters} />
-        )}
+        ) : isProcessing ? (
+          <div className="border-t pt-4 mt-4 space-y-2">
+            <Skeleton className="h-6 w-40" /> {/* "Why this matters" button skeleton */}
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        ) : null}
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {digest.metadata?.prNumber && (
