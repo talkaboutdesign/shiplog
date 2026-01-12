@@ -59,7 +59,7 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{children}</SheetTrigger>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px]">
+      <SheetContent side="right" className="flex flex-col w-[400px] sm:w-[540px]">
         <SheetHeader>
           <SheetTitle>API Keys</SheetTitle>
           <SheetDescription>
@@ -67,7 +67,7 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
             used to generate activity summaries.
           </SheetDescription>
         </SheetHeader>
-        <div className="mt-6 space-y-6">
+        <div className="flex-1 overflow-y-auto mt-6 space-y-6 pr-2">
           <div className="space-y-2">
             <Label htmlFor="openai-key">OpenAI API Key</Label>
             <Input
@@ -143,7 +143,7 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
             </p>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pb-4">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
