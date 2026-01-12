@@ -50,15 +50,10 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
               <span className="text-yellow-600">⚠</span>
               <h4 className="text-sm font-semibold">AI-Detected Impact</h4>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
-                analyzing risk
-              </Badge>
-              <span className="text-xs text-muted-foreground animate-pulse">
-                calculating...
-              </span>
-            </div>
+            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+              analyzing risk
+            </Badge>
           </div>
         </div>
 

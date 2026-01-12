@@ -67,10 +67,12 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
             </div>
             {/* Show animated analyzing badge while loading, or show real badges when available */}
             {isProcessing && perspectives === undefined ? (
-              <Badge variant="outline" className="animate-pulse border-muted-foreground/30 text-muted-foreground">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
-                Analyzing tags
-              </Badge>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+                  ANALYZING
+                </Badge>
+              </div>
             ) : perspectives && perspectives.length > 0 ? (
               <PerspectiveBadges perspectives={perspectives} />
             ) : null}
