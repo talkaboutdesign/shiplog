@@ -1,5 +1,6 @@
 import { UserButton } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
+import { RepoSelector } from "./RepoSelector";
 
 interface HeaderProps {
   actions?: React.ReactNode;
@@ -41,6 +42,7 @@ export function Header({ actions }: HeaderProps) {
           </nav>
         </div>
         <div className="flex items-center gap-3">
+          <RepoSelector />
           {actions}
           <UserButton />
         </div>

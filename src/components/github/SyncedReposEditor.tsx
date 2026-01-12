@@ -15,11 +15,15 @@ import {
 import type { Repository } from "../../../convex/types";
 
 interface SyncedReposEditorProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function SyncedReposEditor({ children }: SyncedReposEditorProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function SyncedReposEditor({ children, open: controlledOpen, onOpenChange }: SyncedReposEditorProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setIsOpen = onOpenChange || setInternalOpen;
   const [searchQuery, setSearchQuery] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const allRepos = useQuery(api.repositories.getAllAvailable);
@@ -104,7 +108,7 @@ export function SyncedReposEditor({ children }: SyncedReposEditorProps) {
   if (allRepos === undefined || activeRepos === undefined) {
     return (
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetTrigger asChild>{children}</SheetTrigger>
+        {children && <SheetTrigger asChild>{children}</SheetTrigger>}
         <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
           <div className="flex items-center justify-center h-full">
             <div className="text-muted-foreground">Loading repositories...</div>
@@ -119,7 +123,7 @@ export function SyncedReposEditor({ children }: SyncedReposEditorProps) {
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>{children}</SheetTrigger>
+      {children && <SheetTrigger asChild>{children}</SheetTrigger>}
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Synced repos</SheetTitle>

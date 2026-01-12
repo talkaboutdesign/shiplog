@@ -16,6 +16,8 @@
   --color-ring: #3b82f6;
   --color-accent: #f4f4f5;
   --color-accent-foreground: var(--color-dark);
+  --color-popover: #ffffff;
+  --color-popover-foreground: var(--color-dark);
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
 }
@@ -33,10 +35,12 @@
     --color-border: #27272a;
     --color-input: #27272a;
     --color-ring: #3b82f6;
-    --color-accent: #27272a;
-    --color-accent-foreground: #fafafa;
-    --color-destructive: #7f1d1d;
-    --color-destructive-foreground: #ffffff;
+  --color-accent: #27272a;
+  --color-accent-foreground: #fafafa;
+  --color-popover: #18181b;
+  --color-popover-foreground: #fafafa;
+  --color-destructive: #7f1d1d;
+  --color-destructive-foreground: #ffffff;
   }
 }
 

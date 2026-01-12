@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { InstallButton } from "@/components/github/InstallButton";
 import { FeedFilters, type FeedFilters as FeedFiltersType } from "@/components/feed/FeedFilters";
 import { ApiKeyDrawer } from "@/components/settings/ApiKeyDrawer";
-import { SyncedReposDropdown } from "@/components/github/SyncedReposDropdown";
 import { DigestCard } from "@/components/feed/DigestCard";
 import { FeedSkeleton } from "@/components/feed/FeedSkeleton";
 import { EmptyFeed } from "@/components/feed/EmptyFeed";
@@ -12,28 +11,28 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useSelectedRepo } from "@/hooks/useSelectedRepo";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG || "shiplog";
 
 export function Feed() {
   const user = useCurrentUser();
-  const activeRepos = useQuery(api.repositories.getAllActive);
+  const { repos: activeRepos, selectedRepoId, isLoading: reposLoading } = useSelectedRepo();
   const [filters, setFilters] = useState<FeedFiltersType>({
     eventType: "all",
     timeRange: "all",
-    repositoryId: "all",
   });
 
-  // Get digests and events from all active repos
-  const repositoryIds = activeRepos?.map((r) => r._id) || [];
+  // Get digests and events from all active repos (for contributors list)
+  const allRepositoryIds = activeRepos?.map((r) => r._id) || [];
   const digests = useQuery(
     api.digests.listByRepositories,
-    repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
+    allRepositoryIds.length > 0 ? { repositoryIds: allRepositoryIds, limit: 50 } : "skip"
   );
   const events = useQuery(
     api.events.listByRepositories,
-    repositoryIds.length > 0 ? { repositoryIds, limit: 50 } : "skip"
+    allRepositoryIds.length > 0 ? { repositoryIds: allRepositoryIds, limit: 50 } : "skip"
   );
 
   // Extract unique contributors from digests and events
@@ -48,7 +47,7 @@ export function Feed() {
   const hasApiKey =
     user?.apiKeys?.openai || user?.apiKeys?.anthropic || user?.apiKeys?.openrouter;
 
-  if (activeRepos === undefined || user === undefined) {
+  if (reposLoading || user === undefined) {
     return (
       <AppShell>
         <div className="container mx-auto max-w-4xl">
@@ -66,15 +65,12 @@ export function Feed() {
     );
   }
 
-  const hasRepos = activeRepos.length > 0;
+  const hasRepos = activeRepos && activeRepos.length > 0;
 
   const headerActions = hasRepos ? (
-    <>
-      <SyncedReposDropdown />
-      <ApiKeyDrawer>
-        <Button variant="outline" size="sm">Settings</Button>
-      </ApiKeyDrawer>
-    </>
+    <ApiKeyDrawer>
+      <Button variant="outline" size="sm">Settings</Button>
+    </ApiKeyDrawer>
   ) : null;
 
   return (
@@ -122,13 +118,12 @@ export function Feed() {
                   filters={filters}
                   onFiltersChange={setFilters}
                   contributors={contributors}
-                  repositories={activeRepos}
                 />
-                <MultiRepoActivityFeed 
+                <MultiRepoActivityFeed
                   repositoryIds={
-                    filters.repositoryId && filters.repositoryId !== "all"
-                      ? [filters.repositoryId]
-                      : repositoryIds
+                    selectedRepoId
+                      ? [selectedRepoId]
+                      : allRepositoryIds
                   }
                   filters={filters}
                 />

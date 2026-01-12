@@ -172,6 +172,131 @@ export const update = internalMutation({
 });
 
 /**
+ * Create a placeholder summary for streaming generation
+ */
+export const createForStreaming = internalMutation({
+  args: {
+    repositoryId: v.id("repositories"),
+    period: v.union(v.literal("daily"), v.literal("weekly"), v.literal("monthly")),
+    periodStart: v.number(),
+    includedDigestIds: v.array(v.id("digests")),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    return await ctx.db.insert("summaries", {
+      repositoryId: args.repositoryId,
+      period: args.period,
+      periodStart: args.periodStart,
+      headline: "Generating summary...",
+      accomplishments: "",
+      keyFeatures: [],
+      workBreakdown: {},
+      metrics: { totalItems: args.includedDigestIds.length },
+      includedDigestIds: args.includedDigestIds,
+      isStreaming: true,
+      lastUpdatedAt: now,
+      createdAt: now,
+    });
+  },
+});
+
+/**
+ * Update summary during streaming (partial updates)
+ */
+export const updateStreaming = internalMutation({
+  args: {
+    summaryId: v.id("summaries"),
+    headline: v.optional(v.string()),
+    accomplishments: v.optional(v.string()),
+    keyFeatures: v.optional(v.array(v.string())),
+    workBreakdown: v.optional(
+      v.object({
+        bugfix: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+        feature: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+        refactor: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+        docs: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+        chore: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+        security: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+      })
+    ),
+    metrics: v.optional(
+      v.object({
+        totalItems: v.number(),
+        averageDeploymentTime: v.optional(v.number()),
+        productionIncidents: v.optional(v.number()),
+        testCoverage: v.optional(v.number()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { summaryId, ...updates } = args;
+    const filteredUpdates: Record<string, unknown> = { lastUpdatedAt: Date.now() };
+
+    if (updates.headline !== undefined) filteredUpdates.headline = updates.headline;
+    if (updates.accomplishments !== undefined) filteredUpdates.accomplishments = updates.accomplishments;
+    if (updates.keyFeatures !== undefined) filteredUpdates.keyFeatures = updates.keyFeatures;
+    if (updates.workBreakdown !== undefined) filteredUpdates.workBreakdown = updates.workBreakdown;
+    if (updates.metrics !== undefined) filteredUpdates.metrics = updates.metrics;
+
+    await ctx.db.patch(summaryId, filteredUpdates);
+  },
+});
+
+/**
+ * Mark streaming as finished
+ */
+export const finishStreaming = internalMutation({
+  args: {
+    summaryId: v.id("summaries"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.summaryId, {
+      isStreaming: false,
+      lastUpdatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Mark streaming as finished and add new digest IDs
+ */
+export const finishStreamingWithDigests = internalMutation({
+  args: {
+    summaryId: v.id("summaries"),
+    newDigestIds: v.array(v.id("digests")),
+  },
+  handler: async (ctx, args) => {
+    const summary = await ctx.db.get(args.summaryId);
+    if (!summary) {
+      throw new Error("Summary not found");
+    }
+
+    const updatedDigestIds = [...summary.includedDigestIds, ...args.newDigestIds];
+
+    await ctx.db.patch(args.summaryId, {
+      includedDigestIds: updatedDigestIds,
+      isStreaming: false,
+      lastUpdatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Start streaming for an existing summary (when updating with new digests)
+ */
+export const startStreaming = internalMutation({
+  args: {
+    summaryId: v.id("summaries"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.summaryId, {
+      isStreaming: true,
+      lastUpdatedAt: Date.now(),
+    });
+  },
+});
+
+/**
  * Internal query to get a summary by ID
  */
 export const getById = internalQuery({
@@ -346,33 +471,169 @@ export const generateSummaryOnDemand = internalAction({
       return null;
     }
 
-    // Generate summary using AI
-    const summaryData = await ctx.runAction(internal.summariesAi.generateSummary, {
+    const digestIds = digests.map((d: Doc<"digests">) => d._id);
+
+    // Create placeholder summary for streaming
+    const summaryId = await ctx.runMutation(internal.summaries.createForStreaming, {
       repositoryId: args.repositoryId,
       period: args.period,
       periodStart: args.periodStart,
-      digestIds: digests.map((d: Doc<"digests">) => d._id),
+      includedDigestIds: digestIds,
     });
 
-    // Create summary in database
-    const summaryId = await ctx.runMutation(internal.summaries.create, {
+    // Start streaming generation (this will update the summary progressively)
+    await ctx.runAction(internal.summariesAi.generateSummaryStreaming, {
+      summaryId,
       repositoryId: args.repositoryId,
       period: args.period,
       periodStart: args.periodStart,
-      headline: summaryData.headline,
-      accomplishments: summaryData.accomplishments,
-      keyFeatures: summaryData.keyFeatures,
-      workBreakdown: summaryData.workBreakdown,
-      metrics: summaryData.metrics,
-      includedDigestIds: digests.map((d: Doc<"digests">) => d._id),
+      digestIds,
     });
 
-    // Return the created summary
+    // Return the completed summary
     const created = await ctx.runQuery(internal.summaries.getById, { summaryId });
     if (!created) {
       throw new Error("Failed to create summary");
     }
     return created;
+  },
+});
+
+/**
+ * Get summary status for a repository and period
+ * Returns the summary (if exists), digest count for period, and whether update is needed
+ */
+export const getSummaryStatus = query({
+  args: {
+    repositoryId: v.id("repositories"),
+    period: v.union(v.literal("daily"), v.literal("weekly"), v.literal("monthly")),
+    periodStart: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
+
+    // Get existing summary
+    const summary = await ctx.db
+      .query("summaries")
+      .withIndex("by_repository_period", (q) =>
+        q
+          .eq("repositoryId", args.repositoryId)
+          .eq("period", args.period)
+          .eq("periodStart", args.periodStart)
+      )
+      .first();
+
+    // Get digests for this period
+    const periodEnd = getPeriodEnd(args.periodStart, args.period);
+    const allDigests = await ctx.db
+      .query("digests")
+      .withIndex("by_repository_time", (q) =>
+        q.eq("repositoryId", args.repositoryId)
+      )
+      .collect();
+
+    // Filter to digests in this period
+    const digestsInPeriod = allDigests.filter(
+      (d) => d.createdAt >= args.periodStart && d.createdAt < periodEnd
+    );
+
+    const digestCount = digestsInPeriod.length;
+    const includedCount = summary?.includedDigestIds?.length || 0;
+    const hasNewDigests = digestCount > includedCount;
+
+    return {
+      summary,
+      digestCount,
+      includedCount,
+      hasNewDigests,
+      needsGeneration: summary === null && digestCount > 0,
+      needsUpdate: summary !== null && hasNewDigests,
+    };
+  },
+});
+
+/**
+ * Public action to update an existing summary with new digests
+ */
+export const updateSummaryPublic = action({
+  args: {
+    repositoryId: v.id("repositories"),
+    period: v.union(v.literal("daily"), v.literal("weekly"), v.literal("monthly")),
+    periodStart: v.number(),
+  },
+  handler: async (ctx, args): Promise<Doc<"summaries"> | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const user = await ctx.runQuery(api.users.getCurrent);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Verify repository ownership
+    const repository = await ctx.runQuery(internal.repositories.getById, {
+      repositoryId: args.repositoryId,
+    });
+    if (!repository) {
+      throw new Error("Repository not found");
+    }
+    if (repository.userId !== user._id) {
+      throw new Error("Repository not authorized");
+    }
+
+    // Get existing summary
+    const existingSummary = await ctx.runQuery(internal.summaries.getByRepositoryPeriod, {
+      repositoryId: args.repositoryId,
+      period: args.period,
+      periodStart: args.periodStart,
+    });
+
+    if (!existingSummary) {
+      // No summary exists, generate new one with streaming
+      return await ctx.runAction(internal.summaries.generateSummaryOnDemand, {
+        repositoryId: args.repositoryId,
+        period: args.period,
+        periodStart: args.periodStart,
+      });
+    }
+
+    // Get digests for this period that aren't included
+    const periodDigests = await ctx.runAction(internal.summaries.getDigestsForPeriod, {
+      repositoryId: args.repositoryId,
+      periodStart: args.periodStart,
+      period: args.period,
+    });
+
+    const includedIds = new Set(existingSummary.includedDigestIds);
+    const newDigests = periodDigests.filter((d: Doc<"digests">) => !includedIds.has(d._id));
+
+    if (newDigests.length === 0) {
+      // No new digests, return existing summary
+      return existingSummary;
+    }
+
+    const newDigestIds = newDigests.map((d: Doc<"digests">) => d._id);
+
+    // Mark summary as streaming
+    await ctx.runMutation(internal.summaries.startStreaming, {
+      summaryId: existingSummary._id,
+    });
+
+    // Update summary with streaming (processes all new digests at once)
+    await ctx.runAction(internal.summariesAi.updateSummaryStreaming, {
+      summaryId: existingSummary._id,
+      newDigestIds,
+    });
+
+    // Return the updated summary
+    const updated = await ctx.runQuery(internal.summaries.getById, {
+      summaryId: existingSummary._id,
+    });
+
+    return updated;
   },
 });
 

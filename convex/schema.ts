@@ -251,6 +251,8 @@ export default defineSchema({
       })
     ),
     includedDigestIds: v.array(v.id("digests")), // Tracks which digests are included
+    // Streaming status for real-time updates during generation
+    isStreaming: v.optional(v.boolean()),
     lastUpdatedAt: v.number(),
     createdAt: v.number(),
   })

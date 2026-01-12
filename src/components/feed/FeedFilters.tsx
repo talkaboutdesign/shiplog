@@ -1,28 +1,23 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select } from "@/components/ui/select";
 import type { GitHubEventType } from "../../../convex/types";
-import type { Repository } from "../../../convex/types";
-import { Id } from "../../../convex/_generated/dataModel";
 
 export interface FeedFilters {
   eventType: GitHubEventType | "all";
   contributor?: string;
   timeRange: "24h" | "7d" | "all";
-  repositoryId?: Id<"repositories"> | "all";
 }
 
 interface FeedFiltersProps {
   filters: FeedFilters;
   onFiltersChange: (filters: FeedFilters) => void;
   contributors?: string[];
-  repositories?: Repository[];
 }
 
 export function FeedFilters({
   filters,
   onFiltersChange,
   contributors = [],
-  repositories = [],
 }: FeedFiltersProps) {
   const handleEventTypeChange = (value: string) => {
     onFiltersChange({
@@ -45,13 +40,6 @@ export function FeedFilters({
     });
   };
 
-  const handleRepositoryChange = (value: string) => {
-    onFiltersChange({
-      ...filters,
-      repositoryId: value === "all" ? "all" : (value as Id<"repositories">),
-    });
-  };
-
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Tabs value={filters.eventType} onValueChange={handleEventTypeChange}>
@@ -61,21 +49,6 @@ export function FeedFilters({
           <TabsTrigger value="pull_request">PR</TabsTrigger>
         </TabsList>
       </Tabs>
-
-      {repositories.length > 1 && (
-        <Select
-          value={filters.repositoryId || "all"}
-          onChange={(e) => handleRepositoryChange(e.target.value)}
-          className="w-auto"
-        >
-          <option value="all">All repositories</option>
-          {repositories.map((repo) => (
-            <option key={repo._id} value={repo._id}>
-              {repo.fullName}
-            </option>
-          ))}
-        </Select>
-      )}
 
       {contributors.length > 0 && (
         <Select

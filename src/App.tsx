@@ -6,6 +6,7 @@ import { Summary } from "./pages/Summary";
 import { Feed } from "./pages/Feed";
 import { GitHubCallback } from "./pages/GitHubCallback";
 import { useCurrentUser } from "./hooks/useCurrentUser";
+import { SelectedRepoProvider } from "./hooks/useSelectedRepo";
 
 export default function App() {
   // Check route
@@ -16,13 +17,15 @@ export default function App() {
   return (
     <>
       <Authenticated>
-        {isCallback ? (
-          <GitHubCallback />
-        ) : isFeed ? (
-          <FeedWrapper />
-        ) : (
-          <SummaryWrapper />
-        )}
+        <SelectedRepoProvider>
+          {isCallback ? (
+            <GitHubCallback />
+          ) : isFeed ? (
+            <FeedWrapper />
+          ) : (
+            <SummaryWrapper />
+          )}
+        </SelectedRepoProvider>
       </Authenticated>
       <Unauthenticated>
         <SignInForm />
