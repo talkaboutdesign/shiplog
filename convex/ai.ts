@@ -48,6 +48,12 @@ const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub a
 
 IMPORTANT: You MUST respond with valid JSON only. Do not include any text before or after the JSON object.
 
+REQUIRED JSON FIELDS (use these exact field names):
+- "title": Brief action-oriented phrase
+- "summary": 2-3 sentence explanation
+- "category": One of: "feature", "bugfix", "refactor", "docs", "chore", "security"
+- "whyThisMatters": 1-2 sentence explanation of business/user impact (REQUIRED - do NOT use "impact" as the field name)
+
 Your summaries should:
 - Lead with WHAT changed and WHY it matters (business impact)
 - Use plain English, avoid technical jargon
@@ -67,6 +73,8 @@ For the category, choose the most appropriate:
 - docs: Documentation updates
 - chore: Maintenance, dependencies, tooling
 - security: Security-related changes
+
+For whyThisMatters: Write 1-2 sentences explaining the business or user impact. This field is REQUIRED.
 
 When multiple commits are present, synthesize them into a single coherent summary that captures the overall change.`;
 
@@ -333,6 +341,19 @@ export const digestEvent = internalAction({
       const model = getModel(preferredProvider, apiKey, modelName);
       const prompt = buildEventPrompt(event, fileDiffs);
 
+      // Helper function to fix common field name mismatches
+      const fixFieldNames = (obj: any): any => {
+        if (!obj || typeof obj !== "object") return obj;
+        
+        // Map "impact" to "whyThisMatters" if present
+        if ("impact" in obj && !("whyThisMatters" in obj)) {
+          obj.whyThisMatters = obj.impact;
+          delete obj.impact;
+        }
+        
+        return obj;
+      };
+
       // Helper function to parse text response as fallback
       const parseTextResponse = (text: string): z.infer<typeof DigestSchema> | null => {
         try {
@@ -340,14 +361,15 @@ export const digestEvent = internalAction({
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
-            return DigestSchema.parse(parsed);
+            const fixed = fixFieldNames(parsed);
+            return DigestSchema.parse(fixed);
           }
           
           // Try to parse structured text format
           const titleMatch = text.match(/Title:\s*(.+?)(?:\n|$)/i);
           const categoryMatch = text.match(/Category:\s*(\w+)/i);
           const summaryMatch = text.match(/Summary:\s*([\s\S]+?)(?:\n\n|Key Changes:|$)/i);
-          const whyMatch = text.match(/Why.*?:\s*([\s\S]+?)(?:\n\n|$)/i);
+          const whyMatch = text.match(/(?:Why|Impact).*?:\s*([\s\S]+?)(?:\n\n|$)/i);
           
           if (titleMatch && categoryMatch && summaryMatch) {
             const category = categoryMatch[1].toLowerCase();
@@ -381,6 +403,19 @@ export const digestEvent = internalAction({
           object = result.object;
           break; // Success, exit retry loop
         } catch (error: any) {
+          // Handle schema validation errors where the model returned wrong field names
+          if (error.value && typeof error.value === "object") {
+            try {
+              const fixed = fixFieldNames(error.value);
+              const validated = DigestSchema.parse(fixed);
+              console.log("Successfully fixed field name mismatch (e.g., 'impact' -> 'whyThisMatters')");
+              object = validated;
+              break; // Successfully fixed, exit retry loop
+            } catch (parseError) {
+              // If fixing didn't work, continue to other fallbacks
+            }
+          }
+          
           // If we got a text response, try to parse it
           if (error.text || error.cause?.text) {
             const textResponse = error.text || error.cause?.text;
