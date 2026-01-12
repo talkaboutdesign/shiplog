@@ -113,20 +113,15 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
             impactAnalysis={digest.impactAnalysis}
             repositoryId={digest.repositoryId}
             event={event ? { fileDiffs: event.fileDiffs } : undefined}
+            isProcessing={isProcessing}
           />
         ) : isProcessing ? (
-          <div className="border-t pt-4 mt-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <Skeleton className="h-6 w-48" /> {/* "AI-Detected Impact" header */}
-              <Skeleton className="h-6 w-24" /> {/* Risk badge */}
-            </div>
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-3/4" />
-            <div className="space-y-2 mt-3">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-5/6" />
-            </div>
-          </div>
+          <ImpactAnalysis
+            impactAnalysis={undefined}
+            repositoryId={digest.repositoryId}
+            event={event ? { fileDiffs: event.fileDiffs } : undefined}
+            isProcessing={true}
+          />
         ) : null}
 
         {digest.whyThisMatters ? (

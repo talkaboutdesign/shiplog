@@ -4,6 +4,7 @@ import { api } from "../../../convex/_generated/api";
 import { SurfaceImpactBadge } from "./SurfaceImpactBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Digest } from "../../../convex/types";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -18,15 +19,46 @@ interface ImpactAnalysisProps {
       deletions: number;
     }>;
   };
+  isProcessing?: boolean;
 }
 
-export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAnalysisProps) {
+export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessing = false }: ImpactAnalysisProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const indexStatus = useQuery(api.surfaces.getRepositoryIndexStatus, {
     repositoryId,
   });
 
-  if (!impactAnalysis || !impactAnalysis.affectedSurfaces.length) {
+  // Don't return null - always show container when impactAnalysis exists or when processing
+  if (!impactAnalysis && !isProcessing) {
+    return null;
+  }
+
+  // If processing but no impactAnalysis yet, show full skeleton structure
+  if (!impactAnalysis && isProcessing) {
+    return (
+      <div className="border-t pt-4 mt-4 space-y-3">
+        <Skeleton className="h-4 w-48" /> {/* Index Status skeleton */}
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-6 w-48" /> {/* "AI-Detected Impact" header */}
+          <Skeleton className="h-6 w-24" /> {/* Risk badge */}
+        </div>
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        <div className="space-y-2 mt-3">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-5/6" />
+        </div>
+        <Skeleton className="h-5 w-32" /> {/* Changed Files header */}
+        <div className="space-y-1">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+        </div>
+      </div>
+    );
+  }
+
+  // If impactAnalysis exists but no affected surfaces, still show container
+  if (!impactAnalysis.affectedSurfaces.length) {
     return null;
   }
 
@@ -55,7 +87,14 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAn
   return (
     <div className="border-t pt-4 mt-4 space-y-4">
       {/* Index Status */}
-      {indexStatus && indexStatus.indexStatus === "completed" && (
+      {indexStatus === undefined ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Skeleton className="h-4 w-4" /> {/* Checkmark skeleton */}
+          <Skeleton className="h-4 w-32" /> {/* "Index Status: Indexed" skeleton */}
+          <Skeleton className="h-4 w-24" /> {/* Date skeleton */}
+          <Skeleton className="h-4 w-20" /> {/* Surface count skeleton */}
+        </div>
+      ) : indexStatus && indexStatus.indexStatus === "completed" ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="text-green-600">✓</span>
           <span>Index Status:</span>
@@ -73,7 +112,7 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAn
             </span>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* AI-Detected Impact - Collapsible */}
       <div className="space-y-3">
@@ -103,43 +142,65 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAn
         </Button>
 
         {/* Overall Explanation */}
-        {isExpanded && impactAnalysis.overallExplanation && (
-          <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
-            <p className="font-medium mb-1">Overall Assessment:</p>
-            <p>{impactAnalysis.overallExplanation}</p>
-            <p className="mt-2 text-xs">
-              <strong>Confidence Score:</strong> This indicates how certain the AI is about the risk assessment. Higher confidence means the analysis is more reliable based on the code structure and changes detected.
-            </p>
-          </div>
-        )}
-
-        {/* Affected Surfaces */}
         {isExpanded && (
-          <div className="space-y-2">
-            {impactAnalysis.affectedSurfaces.map((surface, index) => {
-              const surfaceDetails = surface.surfaceId
-                ? surfaceMap.get(surface.surfaceId)
-                : null;
+          <>
+            {impactAnalysis.overallExplanation ? (
+              <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+                <p className="font-medium mb-1">Overall Assessment:</p>
+                <p>{impactAnalysis.overallExplanation}</p>
+                <p className="mt-2 text-xs">
+                  <strong>Confidence Score:</strong> This indicates how certain the AI is about the risk assessment. Higher confidence means the analysis is more reliable based on the code structure and changes detected.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            )}
 
-              return (
-                <SurfaceImpactBadge
-                  key={index}
-                  surfaceName={surface.surfaceName}
-                  filePath={surfaceDetails?.filePath}
-                  surfaceType={surfaceDetails?.surfaceType}
-                  impactType={surface.impactType}
-                  riskLevel={surface.riskLevel}
-                  confidence={surface.confidence}
-                  explanation={surface.explanation}
-                />
-              );
-            })}
-          </div>
+            {/* Affected Surfaces */}
+            <div className="space-y-2">
+              {surfaces === undefined ? (
+                // Show skeleton for each affected surface
+                impactAnalysis.affectedSurfaces.map((_, index) => (
+                  <Skeleton key={index} className="h-8 w-full" />
+                ))
+              ) : (
+                impactAnalysis.affectedSurfaces.map((surface, index) => {
+                  const surfaceDetails = surface.surfaceId
+                    ? surfaceMap.get(surface.surfaceId)
+                    : null;
+
+                  return (
+                    <SurfaceImpactBadge
+                      key={index}
+                      surfaceName={surface.surfaceName}
+                      filePath={surfaceDetails?.filePath}
+                      surfaceType={surfaceDetails?.surfaceType}
+                      impactType={surface.impactType}
+                      riskLevel={surface.riskLevel}
+                      confidence={surface.confidence}
+                      explanation={surface.explanation}
+                    />
+                  );
+                })
+              )}
+            </div>
+          </>
         )}
       </div>
 
       {/* Changed Files */}
-      {event?.fileDiffs && event.fileDiffs.length > 0 && (
+      {event?.fileDiffs === undefined && isProcessing ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-32" /> {/* "Changed Files" header skeleton */}
+          <div className="space-y-1">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        </div>
+      ) : event?.fileDiffs && event.fileDiffs.length > 0 ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <span>Changed Files ({event.fileDiffs.length})</span>
@@ -155,7 +216,7 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event }: ImpactAn
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
