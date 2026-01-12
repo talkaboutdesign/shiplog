@@ -16,6 +16,8 @@ import type * as github from "../github.js";
 import type * as githubActions from "../githubActions.js";
 import type * as http from "../http.js";
 import type * as repositories from "../repositories.js";
+import type * as surfaces from "../surfaces.js";
+import type * as surfacesActions from "../surfacesActions.js";
 import type * as types from "../types.js";
 import type * as users from "../users.js";
 
@@ -34,6 +36,8 @@ declare const fullApi: ApiFromModules<{
   githubActions: typeof githubActions;
   http: typeof http;
   repositories: typeof repositories;
+  surfaces: typeof surfaces;
+  surfacesActions: typeof surfacesActions;
   types: typeof types;
   users: typeof users;
 }>;

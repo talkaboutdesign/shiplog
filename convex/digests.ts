@@ -33,6 +33,34 @@ export const create = internalMutation({
       })
     ),
     aiModel: v.optional(v.string()),
+    whyThisMatters: v.optional(v.string()),
+    impactAnalysis: v.optional(
+      v.object({
+        affectedSurfaces: v.array(
+          v.object({
+            surfaceId: v.id("codeSurfaces"),
+            surfaceName: v.string(),
+            impactType: v.union(
+              v.literal("modified"),
+              v.literal("added"),
+              v.literal("deleted")
+            ),
+            riskLevel: v.union(
+              v.literal("low"),
+              v.literal("medium"),
+              v.literal("high")
+            ),
+            confidence: v.number(),
+          })
+        ),
+        overallRisk: v.union(
+          v.literal("low"),
+          v.literal("medium"),
+          v.literal("high")
+        ),
+        confidence: v.number(),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("digests", {
@@ -44,6 +72,8 @@ export const create = internalMutation({
       contributors: args.contributors,
       metadata: args.metadata,
       aiModel: args.aiModel,
+      whyThisMatters: args.whyThisMatters,
+      impactAnalysis: args.impactAnalysis,
       createdAt: Date.now(),
     });
   },
@@ -131,5 +161,52 @@ export const getByEvent = query({
       .query("digests")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .first();
+  },
+});
+
+export const createPerspective = internalMutation({
+  args: {
+    digestId: v.id("digests"),
+    perspective: v.union(
+      v.literal("bugfix"),
+      v.literal("ui"),
+      v.literal("feature"),
+      v.literal("security"),
+      v.literal("performance"),
+      v.literal("refactor"),
+      v.literal("docs")
+    ),
+    title: v.string(),
+    summary: v.string(),
+    confidence: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("digestPerspectives", {
+      digestId: args.digestId,
+      perspective: args.perspective,
+      title: args.title,
+      summary: args.summary,
+      confidence: args.confidence,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const getPerspectivesByDigest = query({
+  args: { digestId: v.id("digests") },
+  handler: async (ctx, args) => {
+    const digest = await ctx.db.get(args.digestId);
+    if (!digest) {
+      return [];
+    }
+
+    // Verify repository ownership
+    const user = await getCurrentUser(ctx);
+    await verifyRepositoryOwnership(ctx, digest.repositoryId, user._id);
+
+    return await ctx.db
+      .query("digestPerspectives")
+      .withIndex("by_digest", (q) => q.eq("digestId", args.digestId))
+      .collect();
   },
 });

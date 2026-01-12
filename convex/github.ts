@@ -155,3 +155,141 @@ export async function getInstallationDetails(
     account: { login: string };
   };
 }
+
+export interface FileDiff {
+  filename: string;
+  status: "added" | "removed" | "modified" | "renamed";
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
+}
+
+export interface CompareResult {
+  files: FileDiff[];
+  commits: Array<{
+    sha: string;
+    commit: {
+      message: string;
+      author: { name: string; email: string; date: string };
+    };
+  }>;
+}
+
+// Get file diff for a push event using GitHub Compare API
+export async function getFileDiffForPush(
+  config: GitHubAppConfig,
+  installationId: number,
+  owner: string,
+  repo: string,
+  base: string,
+  head: string
+): Promise<FileDiff[]> {
+  const token = await getInstallationAccessToken(config, installationId);
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/compare/${base}...${head}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as CompareResult;
+  return data.files;
+}
+
+// Get file diff for a PR using GitHub PR Files API
+export async function getFileDiffForPR(
+  config: GitHubAppConfig,
+  installationId: number,
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<FileDiff[]> {
+  const token = await getInstallationAccessToken(config, installationId);
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/files`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.statusText}`);
+  }
+
+  return (await response.json()) as FileDiff[];
+}
+
+// Get file contents from GitHub
+export async function getFileContents(
+  config: GitHubAppConfig,
+  installationId: number,
+  owner: string,
+  repo: string,
+  path: string,
+  ref?: string
+): Promise<string> {
+  const token = await getInstallationAccessToken(config, installationId);
+  const url = ref
+    ? `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${ref}`
+    : `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as { content: string; encoding: string };
+  if (data.encoding === "base64") {
+    return Buffer.from(data.content, "base64").toString("utf-8");
+  }
+  return data.content;
+}
+
+// Get repository tree (file structure)
+export async function getRepositoryTree(
+  config: GitHubAppConfig,
+  installationId: number,
+  owner: string,
+  repo: string,
+  ref: string = "main",
+  recursive: boolean = true
+): Promise<Array<{ path: string; type: string; sha: string }>> {
+  const token = await getInstallationAccessToken(config, installationId);
+  const url = recursive
+    ? `https://api.github.com/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`
+    : `https://api.github.com/repos/${owner}/${repo}/git/trees/${ref}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as {
+    tree: Array<{ path: string; type: string; sha: string }>;
+  };
+  return data.tree.filter((item) => item.type === "blob"); // Only files
+}

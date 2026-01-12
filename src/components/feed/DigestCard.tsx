@@ -3,6 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CategoryBadge } from "@/components/common/CategoryBadge";
 import { TimeAgo } from "@/components/common/TimeAgo";
+import { PerspectiveBadges } from "./PerspectiveBadges";
+import { WhyThisMatters } from "./WhyThisMatters";
+import { ImpactAnalysis } from "./ImpactAnalysis";
+import { usePerspectives } from "@/hooks/usePerspectives";
 import type { Digest } from "../../../convex/types";
 
 interface DigestCardProps {
@@ -13,6 +17,7 @@ interface DigestCardProps {
 export function DigestCard({ digest, repositoryFullName }: DigestCardProps) {
   const contributor = digest.contributors[0] || "unknown";
   const githubUrl = digest.metadata?.prUrl || digest.metadata?.issueUrl || digest.metadata?.compareUrl;
+  const perspectives = usePerspectives(digest._id);
 
   return (
     <Card>
@@ -23,6 +28,9 @@ export function DigestCard({ digest, repositoryFullName }: DigestCardProps) {
               <CardTitle className="text-lg">{digest.title}</CardTitle>
               <CategoryBadge category={digest.category} />
             </div>
+            {perspectives && perspectives.length > 0 && (
+              <PerspectiveBadges perspectives={perspectives} />
+            )}
             <CardDescription>
               <TimeAgo timestamp={digest.createdAt} />
             </CardDescription>
@@ -35,6 +43,14 @@ export function DigestCard({ digest, repositoryFullName }: DigestCardProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm leading-relaxed">{digest.summary}</p>
+
+        {digest.impactAnalysis && (
+          <ImpactAnalysis impactAnalysis={digest.impactAnalysis} />
+        )}
+
+        {digest.whyThisMatters && (
+          <WhyThisMatters content={digest.whyThisMatters} />
+        )}
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>by {contributor}</span>

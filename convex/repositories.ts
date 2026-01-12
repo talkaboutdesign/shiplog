@@ -297,6 +297,77 @@ export const getById = internalQuery({
   },
 });
 
+export const updateIndexStatus = internalMutation({
+  args: {
+    repositoryId: v.id("repositories"),
+    indexStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("indexing"),
+        v.literal("completed"),
+        v.literal("failed")
+      )
+    ),
+    indexedAt: v.optional(v.number()),
+    indexError: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const update: {
+      indexStatus?: "pending" | "indexing" | "completed" | "failed";
+      indexedAt?: number;
+      indexError?: string;
+      updatedAt: number;
+    } = {
+      updatedAt: Date.now(),
+    };
+
+    if (args.indexStatus !== undefined) {
+      update.indexStatus = args.indexStatus;
+    }
+    if (args.indexedAt !== undefined) {
+      update.indexedAt = args.indexedAt;
+    }
+    if (args.indexError !== undefined) {
+      update.indexError = args.indexError;
+    }
+
+    await ctx.db.patch(args.repositoryId, update);
+  },
+});
+
+export const triggerIndexing = mutation({
+  args: {
+    repositoryId: v.id("repositories"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const repo = await ctx.db.get(args.repositoryId);
+    if (!repo || repo.userId !== user._id) {
+      throw new Error("Repository not found or unauthorized");
+    }
+
+    // Schedule indexing action
+    await ctx.scheduler.runAfter(0, internal.surfacesActions.indexRepository, {
+      repositoryId: args.repositoryId,
+    });
+
+    return { triggered: true };
+  },
+});
+
 
 export const createOrUpdateRepository = internalMutation({
   args: {

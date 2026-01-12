@@ -76,6 +76,33 @@ export const updateStatus = internalMutation({
   },
 });
 
+export const updateFileDiffs = internalMutation({
+  args: {
+    eventId: v.id("events"),
+    fileDiffs: v.array(
+      v.object({
+        filename: v.string(),
+        status: v.union(
+          v.literal("added"),
+          v.literal("removed"),
+          v.literal("modified"),
+          v.literal("renamed")
+        ),
+        additions: v.number(),
+        deletions: v.number(),
+        changes: v.number(),
+        patch: v.optional(v.string()),
+        previous_filename: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.eventId, {
+      fileDiffs: args.fileDiffs,
+    });
+  },
+});
+
 export const get = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {

@@ -125,7 +125,13 @@ After deploying to Convex:
 1. **Sign In**: Authenticate with GitHub via Clerk
 2. **Install App**: Install ShipLog GitHub App on your repository
 3. **Configure API Keys**: Add your OpenAI or Anthropic API key in Settings
-4. **Watch Activity**: Push commits, open PRs, or create issues → AI digests appear automatically
+4. **Automatic Indexing**: ShipLog automatically indexes your codebase structure (happens in background)
+5. **Watch Activity**: Push commits, open PRs, or create issues → Enhanced AI digests appear automatically with:
+   - Deep code analysis (actual file diffs, not just commit messages)
+   - Impact assessment (which components/services are affected)
+   - Multiple perspectives (BUGFIX, UI, FEATURE, etc.)
+   - Risk indicators and confidence scores
+   - Business impact explanations
 
 ## Architecture
 
@@ -141,6 +147,88 @@ After deploying to Convex:
 - ✅ Support for push, PR, issue, and PR review events
 - ✅ Filter by event type, contributor, and time range
 - ✅ Bring Your Own Key (BYOK) for AI providers
+- ✅ **Enhanced AI Analysis** (see below)
+
+## Enhanced AI Analysis
+
+ShipLog goes beyond simple commit message rewriting to provide deep code analysis and impact insights:
+
+### Code Surface Indexing
+
+ShipLog automatically indexes your codebase structure to understand components, services, and their relationships:
+
+- **Automatic Indexing**: When you connect a repository, ShipLog scans your codebase structure
+- **Lazy Indexing**: Existing repositories are automatically indexed when they receive their first event after the feature is enabled
+- **Surface Detection**: Identifies React components, services, utilities, hooks, types, and config files based on naming conventions and file paths
+- **Dependency Tracking**: Maps relationships between files through import/require statements
+
+### File Diff Analysis
+
+Instead of just analyzing commit messages, ShipLog fetches and analyzes actual code changes:
+
+- **Real Code Changes**: Fetches file diffs from GitHub API for push and PR events
+- **Enhanced Context**: AI analyzes actual code patches, not just metadata
+- **Accurate Summaries**: Understands what was actually changed vs. what the commit message says
+
+### Impact Analysis
+
+ShipLog determines which code surfaces are affected by changes and assesses risk:
+
+- **Surface Mapping**: Maps changed files to known components/services
+- **Risk Assessment**: Categorizes impact as low, medium, or high risk
+- **Confidence Scores**: Provides confidence levels (0-100%) for impact assessments
+- **Dependency Detection**: Identifies downstream effects when core components change
+
+### Multi-Perspective Summaries
+
+Each event can generate multiple summaries from different perspectives:
+
+- **BUGFIX Perspective**: Focuses on what was fixed and why it matters
+- **UI Perspective**: Highlights user-facing changes and interface improvements
+- **FEATURE Perspective**: Explains new functionality and capabilities
+- **Additional Perspectives**: Security, performance, refactor, and docs perspectives when relevant
+- **Confidence Scores**: Each perspective includes a confidence score
+
+### "Why This Matters" Section
+
+Every digest includes a business impact explanation:
+
+- **User-Facing Impact**: Explains how changes affect end users
+- **Business Value**: Highlights the value delivered by the changes
+- **Risk Mitigation**: Describes how changes reduce risk or technical debt
+- **Stakeholder-Friendly**: Written in plain English for non-technical stakeholders
+
+### How It Works
+
+1. **First Event Processing**: When a repository receives its first event after enabling enhanced analysis:
+   - ShipLog checks if the codebase is indexed
+   - If not indexed, triggers automatic indexing (runs in background)
+   - Generates basic digest while indexing completes
+   - Future events get full enhanced analysis once indexing is complete
+
+2. **Subsequent Events**: For each new event:
+   - Fetches file diffs from GitHub API
+   - Updates surface index incrementally based on changed files
+   - Analyzes which surfaces are affected
+   - Generates multiple perspective summaries
+   - Assesses impact risk and confidence
+   - Creates comprehensive digest with all insights
+
+3. **Graceful Degradation**: If indexing isn't complete or fails:
+   - System still generates basic digests (backward compatible)
+   - Shows indicator that enhanced analysis is in progress
+   - Automatically upgrades to full analysis once ready
+
+### Indexing Status
+
+You can check the indexing status of your repositories:
+
+- **Pending**: Repository hasn't been indexed yet
+- **Indexing**: Indexing is in progress (first time or after major changes)
+- **Completed**: Index is ready, all events get enhanced analysis
+- **Failed**: Indexing encountered an error (can be retried)
+
+Indexing typically completes within a few minutes for small to medium repositories. Large repositories may take longer.
 
 ## Project Structure
 
@@ -153,12 +241,22 @@ shiplog/
 │   ├── events.ts        # Event storage
 │   ├── digests.ts       # Digest queries
 │   ├── ai.ts            # AI digest generation
+│   ├── surfaces.ts      # Code surface indexing
 │   ├── github.ts        # GitHub API helpers
 │   └── http.ts          # HTTP routes (webhook, callback)
 ├── src/
 │   ├── components/      # React components
+│   │   ├── feed/       # Feed components
+│   │   │   ├── DigestCard.tsx
+│   │   │   ├── PerspectiveBadges.tsx
+│   │   │   ├── ImpactAnalysis.tsx
+│   │   │   ├── SurfaceImpactBadge.tsx
+│   │   │   └── WhyThisMatters.tsx
+│   │   └── ...
 │   ├── pages/           # Page components
 │   ├── hooks/           # Custom React hooks
+│   │   ├── useDigests.ts
+│   │   └── usePerspectives.ts
 │   └── lib/             # Utilities
 └── package.json
 ```
@@ -177,6 +275,13 @@ shiplog/
 - Check that preferred provider matches configured key
 - Verify Convex logs for AI API errors
 - Check event status in database (may be "failed" or "skipped")
+
+### Enhanced Analysis Not Available
+
+- **Indexing in Progress**: If you see "Enhanced analysis unavailable - indexing in progress", wait a few minutes for indexing to complete
+- **Indexing Failed**: Check Convex logs for indexing errors. You can manually trigger re-indexing if needed
+- **First Event**: The first event after connecting a repository may only have basic analysis while indexing completes
+- **Large Repositories**: Very large repositories may take longer to index. Check indexing status in repository settings
 
 ### Authentication Issues
 
