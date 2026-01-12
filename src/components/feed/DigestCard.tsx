@@ -1,7 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { CategoryBadge } from "@/components/common/CategoryBadge";
 import { TimeAgo } from "@/components/common/TimeAgo";
 import { PerspectiveBadges } from "./PerspectiveBadges";
 import { WhyThisMatters } from "./WhyThisMatters";
@@ -24,10 +22,8 @@ export function DigestCard({ digest, repositoryFullName }: DigestCardProps) {
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <CardTitle className="text-lg">{digest.title}</CardTitle>
-              <CategoryBadge category={digest.category} />
-            </div>
+            <CardTitle className="text-lg">{digest.title}</CardTitle>
+            {/* Only show perspective badges, show nothing if no perspectives exist */}
             {perspectives && perspectives.length > 0 && (
               <PerspectiveBadges perspectives={perspectives} />
             )}
