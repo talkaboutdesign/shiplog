@@ -24,6 +24,7 @@ export function Dashboard() {
   const [filters, setFilters] = useState<FeedFiltersType>({
     eventType: "all",
     timeRange: "all",
+    repositoryId: "all",
   });
 
   // Get digests and events from all active repos
@@ -138,8 +139,15 @@ export function Dashboard() {
                   filters={filters}
                   onFiltersChange={setFilters}
                   contributors={contributors}
+                  repositories={activeRepos}
                 />
-                <MultiRepoActivityFeed repositoryIds={repositoryIds} />
+                <MultiRepoActivityFeed 
+                  repositoryIds={
+                    filters.repositoryId && filters.repositoryId !== "all"
+                      ? [filters.repositoryId]
+                      : repositoryIds
+                  } 
+                />
               </>
             )}
           </>

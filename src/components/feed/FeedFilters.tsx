@@ -2,23 +2,28 @@ import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select } from "@/components/ui/select";
 import type { GitHubEventType } from "../../../convex/types";
+import type { Repository } from "../../../convex/types";
+import { Id } from "../../../convex/_generated/dataModel";
 
 export interface FeedFilters {
   eventType: GitHubEventType | "all";
   contributor?: string;
   timeRange: "24h" | "7d" | "all";
+  repositoryId?: Id<"repositories"> | "all";
 }
 
 interface FeedFiltersProps {
   filters: FeedFilters;
   onFiltersChange: (filters: FeedFilters) => void;
   contributors?: string[];
+  repositories?: Repository[];
 }
 
 export function FeedFilters({
   filters,
   onFiltersChange,
   contributors = [],
+  repositories = [],
 }: FeedFiltersProps) {
   const handleEventTypeChange = (value: string) => {
     onFiltersChange({
@@ -41,6 +46,13 @@ export function FeedFilters({
     });
   };
 
+  const handleRepositoryChange = (value: string) => {
+    onFiltersChange({
+      ...filters,
+      repositoryId: value === "all" ? "all" : (value as Id<"repositories">),
+    });
+  };
+
   return (
     <div className="space-y-4">
       <Tabs value={filters.eventType} onValueChange={handleEventTypeChange}>
@@ -53,6 +65,22 @@ export function FeedFilters({
       </Tabs>
 
       <div className="flex gap-4">
+        {repositories.length > 1 && (
+          <div className="flex-1">
+            <Select
+              value={filters.repositoryId || "all"}
+              onChange={(e) => handleRepositoryChange(e.target.value)}
+            >
+              <option value="all">All repositories</option>
+              {repositories.map((repo) => (
+                <option key={repo._id} value={repo._id}>
+                  {repo.fullName}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+
         {contributors.length > 0 && (
           <div className="flex-1">
             <Select

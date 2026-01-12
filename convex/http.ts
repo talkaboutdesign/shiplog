@@ -154,18 +154,36 @@ http.route({
     }
 
     try {
-      // Find repository by installation ID
+      // Get repository information from payload
+      const repositoryPayload = payload.repository;
+      if (!repositoryPayload || !repositoryPayload.id) {
+        return new Response("Missing repository information in payload", { status: 400 });
+      }
+
+      const githubRepoId = repositoryPayload.id;
       const installationId = payload.installation?.id;
+      
       if (!installationId) {
         return new Response("Missing installation ID", { status: 400 });
       }
 
-      const repository = await ctx.runQuery(internal.repositories.getByInstallationInternal, {
-        installationId,
+      // Find repository by GitHub repository ID (more accurate than installation ID)
+      // This ensures we match the exact repository the event came from
+      let repository = await ctx.runQuery(internal.repositories.getByGithubId, {
+        githubId: githubRepoId,
       });
 
+      // Fallback: if repository not found by GitHub ID, try by installation ID
+      // This handles edge cases where repo might not be synced yet
       if (!repository) {
-        console.error(`Repository not found for installation ${installationId}`);
+        console.warn(`Repository with GitHub ID ${githubRepoId} not found, trying installation ID ${installationId}`);
+        repository = await ctx.runQuery(internal.repositories.getByInstallationInternal, {
+          installationId,
+        });
+      }
+
+      if (!repository) {
+        console.error(`Repository not found for GitHub ID ${githubRepoId} or installation ${installationId}`);
         return new Response("Repository not found", { status: 404 });
       }
 

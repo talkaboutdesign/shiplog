@@ -228,6 +228,16 @@ export const getByInstallationInternal = internalQuery({
   },
 });
 
+export const getByGithubId = internalQuery({
+  args: { githubId: v.number() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("repositories")
+      .withIndex("by_github_id", (q) => q.eq("githubId", args.githubId))
+      .first();
+  },
+});
+
 export const getByInstallationForRefresh = internalQuery({
   args: {
     userId: v.id("users"),
