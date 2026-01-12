@@ -109,8 +109,8 @@ export function SyncedReposEditor({ children, open: controlledOpen, onOpenChange
     return (
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         {children && <SheetTrigger asChild>{children}</SheetTrigger>}
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-          <div className="flex items-center justify-center h-full">
+        <SheetContent side="right" className="w-[500px] sm:w-[600px] overflow-y-auto">
+          <div className="flex items-center justify-center h-full px-6">
             <div className="text-muted-foreground">Loading repositories...</div>
           </div>
         </SheetContent>
@@ -124,8 +124,8 @@ export function SyncedReposEditor({ children, open: controlledOpen, onOpenChange
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       {children && <SheetTrigger asChild>{children}</SheetTrigger>}
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
+      <SheetContent side="right" className="w-[500px] sm:w-[600px] flex flex-col overflow-hidden">
+        <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle>Synced repos</SheetTitle>
           <SheetDescription>
             Select the repos you would like to sync to ShipLog. Repos must be
@@ -135,7 +135,8 @@ export function SyncedReposEditor({ children, open: controlledOpen, onOpenChange
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        {/* Fixed section: Status bar and search */}
+        <div className="px-6 mt-8 space-y-6 shrink-0">
           {/* Status bar */}
           <div className="flex items-center justify-between text-sm">
             <div className="text-muted-foreground">
@@ -243,89 +244,108 @@ export function SyncedReposEditor({ children, open: controlledOpen, onOpenChange
               </button>
             )}
           </div>
+        </div>
 
-          {/* Selected repositories section */}
-          {selectedRepos.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Selected repositories</h3>
-              <div className="space-y-1 rounded-lg border bg-muted/50 p-3">
-                {selectedRepos.map((repo) => {
-                  const isActive = activeRepoIds.has(repo._id);
-                  return (
-                    <label
-                      key={repo._id}
-                      className="flex items-center gap-3 p-2 rounded hover:bg-background cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={isActive}
-                        onChange={() => handleToggle(repo._id, isActive)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{repo.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {repo.fullName}
+        {/* Scrollable section: Repository list */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
+          <div className="space-y-8">
+            {/* Selected repositories section */}
+            {selectedRepos.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Selected repositories</h3>
+                <div className="space-y-1 rounded-lg border bg-muted/50 p-4">
+                  {selectedRepos.map((repo) => {
+                    const isActive = activeRepoIds.has(repo._id);
+                    return (
+                      <label
+                        key={repo._id}
+                        className="flex items-center gap-3 p-2 rounded hover:bg-background cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={isActive}
+                          onCheckedChange={() => handleToggle(repo._id, isActive)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div 
+                          className="flex-1 min-w-0"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleToggle(repo._id, isActive);
+                          }}
+                        >
+                          <div className="font-medium truncate">{repo.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {repo.fullName}
+                          </div>
                         </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Grouped repositories - show unselected repos grouped by owner */}
+            {groupedRepos.length > 0 && (
+              <div className="space-y-6">
+                {groupedRepos.map(([owner, repos]) => {
+                  // Only show unselected repos in the grouped section
+                  const unselectedRepos = repos.filter((repo) => !activeRepoIds.has(repo._id));
+                  
+                  if (unselectedRepos.length === 0) {
+                    return null;
+                  }
+
+                  return (
+                    <div key={owner} className="space-y-3">
+                      <h3 className="text-sm font-semibold">{owner}</h3>
+                      <div className="space-y-1">
+                        {unselectedRepos.map((repo) => {
+                          const isActive = activeRepoIds.has(repo._id);
+                          return (
+                            <label
+                              key={repo._id}
+                              className="flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={isActive}
+                                onCheckedChange={() => handleToggle(repo._id, isActive)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div 
+                                className="flex-1 min-w-0"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleToggle(repo._id, isActive);
+                                }}
+                              >
+                                <div className="font-medium truncate">
+                                  {repo.name}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {repo.fullName}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
                       </div>
-                    </label>
+                    </div>
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Grouped repositories - show unselected repos grouped by owner */}
-          {groupedRepos.length > 0 && (
-            <div className="space-y-4">
-              {groupedRepos.map(([owner, repos]) => {
-                // Only show unselected repos in the grouped section
-                const unselectedRepos = repos.filter((repo) => !activeRepoIds.has(repo._id));
-                
-                if (unselectedRepos.length === 0) {
-                  return null;
-                }
-
-                return (
-                  <div key={owner} className="space-y-2">
-                    <h3 className="text-sm font-semibold">{owner}</h3>
-                    <div className="space-y-1">
-                      {unselectedRepos.map((repo) => {
-                        const isActive = activeRepoIds.has(repo._id);
-                        return (
-                          <label
-                            key={repo._id}
-                            className="flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={isActive}
-                              onChange={() => handleToggle(repo._id, isActive)}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium truncate">
-                                {repo.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {repo.fullName}
-                              </div>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {filteredRepos.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No repositories found
-            </div>
-          )}
+            {filteredRepos.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                No repositories found
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer actions */}
-        <div className="mt-8 flex justify-end gap-3 border-t pt-4">
+        <div className="flex justify-end gap-3 border-t pt-6 pb-6 px-6 shrink-0">
           <Button variant="outline" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>

@@ -82,80 +82,17 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{children}</SheetTrigger>
-      <SheetContent side="right" className="flex flex-col w-[400px] sm:w-[540px]">
-        <SheetHeader>
+      <SheetContent side="right" className="flex flex-col w-[500px] sm:w-[600px]">
+        <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle>API Keys</SheetTitle>
           <SheetDescription>
             Configure your AI provider API keys. These are stored securely and
             used to generate activity summaries.
           </SheetDescription>
         </SheetHeader>
-        <div className="flex-1 overflow-y-auto mt-6 space-y-6 pr-2">
-          <div className="space-y-2">
-            <Label htmlFor="openai-key">OpenAI API Key</Label>
-            <Input
-              id="openai-key"
-              type="password"
-              placeholder="sk-..."
-              value={openaiKey}
-              onChange={(e) => setOpenaiKey(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Your OpenAI API key (required for OpenAI provider)
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="anthropic-key">Anthropic API Key</Label>
-            <Input
-              id="anthropic-key"
-              type="password"
-              placeholder="sk-ant-..."
-              value={anthropicKey}
-              onChange={(e) => setAnthropicKey(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Your Anthropic API key (required for Anthropic provider)
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="openrouter-key">OpenRouter API Key</Label>
-            <Input
-              id="openrouter-key"
-              type="password"
-              placeholder="sk-or-..."
-              value={openrouterKey}
-              onChange={(e) => setOpenrouterKey(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Your OpenRouter API key (required for OpenRouter provider)
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="openrouter-model">OpenRouter Model</Label>
-            <Select
-              value={openrouterModel}
-              onValueChange={setOpenrouterModel}
-            >
-              <SelectTrigger id="openrouter-model">
-                <SelectValue placeholder="Select a model" />
-              </SelectTrigger>
-              <SelectContent>
-                {openRouterModels.map((model) => (
-                  <SelectItem key={model.value} value={model.value}>
-                    {model.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Select which model to use with OpenRouter
-            </p>
-          </div>
-
-          <div className="space-y-2">
+        <div className="flex-1 overflow-y-auto mt-8 space-y-8 px-6 pb-6">
+          {/* Provider Selection - At the top */}
+          <div className="space-y-3">
             <Label htmlFor="provider">Preferred Provider</Label>
             <Select
               value={preferredProvider}
@@ -177,7 +114,82 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
             </p>
           </div>
 
-          <div className="flex justify-end gap-2 pb-4">
+          {/* Model Selection - Only for OpenRouter */}
+          {preferredProvider === "openrouter" && (
+            <div className="space-y-3">
+              <Label htmlFor="openrouter-model">OpenRouter Model</Label>
+              <Select
+                value={openrouterModel}
+                onValueChange={setOpenrouterModel}
+              >
+                <SelectTrigger id="openrouter-model">
+                  <SelectValue placeholder="Select a model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {openRouterModels.map((model) => (
+                    <SelectItem key={model.value} value={model.value}>
+                      {model.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Select which model to use with OpenRouter
+              </p>
+            </div>
+          )}
+
+          {/* API Key Inputs - Only show the relevant one */}
+          {preferredProvider === "openai" && (
+            <div className="space-y-3">
+              <Label htmlFor="openai-key">OpenAI API Key</Label>
+              <Input
+                id="openai-key"
+                type="password"
+                placeholder="sk-..."
+                value={openaiKey}
+                onChange={(e) => setOpenaiKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Your OpenAI API key (required for OpenAI provider)
+              </p>
+            </div>
+          )}
+
+          {preferredProvider === "anthropic" && (
+            <div className="space-y-3">
+              <Label htmlFor="anthropic-key">Anthropic API Key</Label>
+              <Input
+                id="anthropic-key"
+                type="password"
+                placeholder="sk-ant-..."
+                value={anthropicKey}
+                onChange={(e) => setAnthropicKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Your Anthropic API key (required for Anthropic provider)
+              </p>
+            </div>
+          )}
+
+          {preferredProvider === "openrouter" && (
+            <div className="space-y-3">
+              <Label htmlFor="openrouter-key">OpenRouter API Key</Label>
+              <Input
+                id="openrouter-key"
+                type="password"
+                placeholder="sk-or-..."
+                value={openrouterKey}
+                onChange={(e) => setOpenrouterKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Your OpenRouter API key (required for OpenRouter provider)
+              </p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 pt-4 pb-6">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
