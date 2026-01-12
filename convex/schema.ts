@@ -225,4 +225,35 @@ export default defineSchema({
   })
     .index("by_digest", ["digestId"])
     .index("by_digest_perspective", ["digestId", "perspective"]),
+
+  // ============ SUMMARIES ============
+  summaries: defineTable({
+    repositoryId: v.id("repositories"),
+    period: v.union(v.literal("daily"), v.literal("weekly"), v.literal("monthly")),
+    periodStart: v.number(), // UTC timestamp for period start
+    headline: v.string(),
+    accomplishments: v.string(), // Main body text
+    keyFeatures: v.array(v.string()),
+    workBreakdown: v.object({
+      bugfix: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+      feature: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+      refactor: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+      docs: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+      chore: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+      security: v.optional(v.object({ percentage: v.number(), count: v.number() })),
+    }),
+    metrics: v.optional(
+      v.object({
+        totalItems: v.number(),
+        averageDeploymentTime: v.optional(v.number()),
+        productionIncidents: v.optional(v.number()),
+        testCoverage: v.optional(v.number()),
+      })
+    ),
+    includedDigestIds: v.array(v.id("digests")), // Tracks which digests are included
+    lastUpdatedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_repository_period", ["repositoryId", "period", "periodStart"])
+    .index("by_repository_time", ["repositoryId", "periodStart"]),
 });

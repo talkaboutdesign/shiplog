@@ -2,6 +2,7 @@ import { query, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
 import { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 export const create = internalMutation({
   args: {
@@ -63,7 +64,7 @@ export const create = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("digests", {
+    const digestId = await ctx.db.insert("digests", {
       repositoryId: args.repositoryId,
       eventId: args.eventId,
       title: args.title,
@@ -76,6 +77,15 @@ export const create = internalMutation({
       impactAnalysis: args.impactAnalysis,
       createdAt: Date.now(),
     });
+
+    // Trigger summary updates for this digest
+    await ctx.scheduler.runAfter(0, internal.summaries.updateSummariesForDigest, {
+      repositoryId: args.repositoryId,
+      digestId,
+      digestCreatedAt: Date.now(),
+    });
+
+    return digestId;
   },
 });
 
@@ -247,6 +257,13 @@ export const getByEvent = query({
       .query("digests")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .first();
+  },
+});
+
+export const getById = internalQuery({
+  args: { digestId: v.id("digests") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.digestId);
   },
 });
 

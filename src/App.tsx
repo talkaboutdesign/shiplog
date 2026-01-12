@@ -2,21 +2,26 @@
 
 import { Authenticated, Unauthenticated } from "convex/react";
 import { SignInButton } from "@clerk/clerk-react";
-import { Dashboard } from "./pages/Dashboard";
+import { Summary } from "./pages/Summary";
+import { Feed } from "./pages/Feed";
 import { GitHubCallback } from "./pages/GitHubCallback";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 
 export default function App() {
-  // Check if we're on the callback route
-  const isCallback = window.location.pathname === "/github/callback";
+  // Check route
+  const path = window.location.pathname;
+  const isCallback = path === "/github/callback";
+  const isFeed = path === "/feed";
 
   return (
     <>
       <Authenticated>
         {isCallback ? (
           <GitHubCallback />
+        ) : isFeed ? (
+          <FeedWrapper />
         ) : (
-          <DashboardWrapper />
+          <SummaryWrapper />
         )}
       </Authenticated>
       <Unauthenticated>
@@ -26,9 +31,14 @@ export default function App() {
   );
 }
 
-function DashboardWrapper() {
+function SummaryWrapper() {
   useCurrentUser();
-  return <Dashboard />;
+  return <Summary />;
+}
+
+function FeedWrapper() {
+  useCurrentUser();
+  return <Feed />;
 }
 
 function SignInForm() {

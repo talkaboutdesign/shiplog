@@ -1,14 +1,45 @@
 import { UserButton } from "@clerk/clerk-react";
+import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   actions?: React.ReactNode;
 }
 
 export function Header({ actions }: HeaderProps) {
+  const path = window.location.pathname;
+  const isSummary = path === "/";
+  const isFeed = path === "/feed";
+
   return (
     <header className="sticky top-0 z-10 border-b bg-background p-4">
       <div className="container mx-auto flex items-center justify-between">
-        <h1 className="text-xl font-bold">ShipLog</h1>
+        <div className="flex items-center gap-6">
+          <h1 className="text-xl font-bold">ShipLog</h1>
+          <nav className="flex items-center gap-4">
+            <a
+              href="/"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-primary",
+                isSummary
+                  ? "text-foreground"
+                  : "text-muted-foreground"
+              )}
+            >
+              Summary
+            </a>
+            <a
+              href="/feed"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-primary",
+                isFeed
+                  ? "text-foreground"
+                  : "text-muted-foreground"
+              )}
+            >
+              Feed
+            </a>
+          </nav>
+        </div>
         <div className="flex items-center gap-3">
           {actions}
           <UserButton />
