@@ -12,7 +12,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ApiKeyDrawerProps {
   children: React.ReactNode;
@@ -26,8 +32,25 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
   const [openaiKey, setOpenaiKey] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openrouterKey, setOpenrouterKey] = useState("");
-  const [openrouterModel, setOpenrouterModel] = useState("");
+  const [openrouterModel, setOpenrouterModel] = useState("openai/gpt-4o-mini");
   const [preferredProvider, setPreferredProvider] = useState<"openai" | "anthropic" | "openrouter">("openai");
+
+  // Popular OpenRouter models
+  const openRouterModels = [
+    { value: "openai/gpt-4o-mini", label: "OpenAI GPT-4o Mini" },
+    { value: "openai/gpt-4o", label: "OpenAI GPT-4o" },
+    { value: "openai/gpt-4-turbo", label: "OpenAI GPT-4 Turbo" },
+    { value: "openai/gpt-3.5-turbo", label: "OpenAI GPT-3.5 Turbo" },
+    { value: "anthropic/claude-3.5-haiku", label: "Anthropic Claude 3.5 Haiku" },
+    { value: "anthropic/claude-3.5-sonnet", label: "Anthropic Claude 3.5 Sonnet" },
+    { value: "anthropic/claude-3-opus", label: "Anthropic Claude 3 Opus" },
+    { value: "google/gemini-pro-1.5", label: "Google Gemini Pro 1.5" },
+    { value: "google/gemini-flash-1.5", label: "Google Gemini Flash 1.5" },
+    { value: "meta-llama/llama-3.1-70b-instruct", label: "Meta Llama 3.1 70B" },
+    { value: "meta-llama/llama-3.1-8b-instruct", label: "Meta Llama 3.1 8B" },
+    { value: "mistralai/mistral-large", label: "Mistral Large" },
+    { value: "mistralai/mixtral-8x7b-instruct", label: "Mistral Mixtral 8x7B" },
+  ];
 
   // Initialize form when user data loads or drawer opens
   useEffect(() => {
@@ -35,7 +58,7 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
       setOpenaiKey(user.apiKeys.openai || "");
       setAnthropicKey(user.apiKeys.anthropic || "");
       setOpenrouterKey(user.apiKeys.openrouter || "");
-      setOpenrouterModel(user.apiKeys.openrouterModel || "");
+      setOpenrouterModel(user.apiKeys.openrouterModel || "openai/gpt-4o-mini");
       setPreferredProvider(user.apiKeys.preferredProvider || "openai");
     }
   }, [open, user]);
@@ -112,31 +135,42 @@ export function ApiKeyDrawer({ children }: ApiKeyDrawerProps) {
 
           <div className="space-y-2">
             <Label htmlFor="openrouter-model">OpenRouter Model</Label>
-            <Input
-              id="openrouter-model"
-              type="text"
-              placeholder="openai/gpt-4o-mini"
+            <Select
               value={openrouterModel}
-              onChange={(e) => setOpenrouterModel(e.target.value)}
-            />
+              onValueChange={setOpenrouterModel}
+            >
+              <SelectTrigger id="openrouter-model">
+                <SelectValue placeholder="Select a model" />
+              </SelectTrigger>
+              <SelectContent>
+                {openRouterModels.map((model) => (
+                  <SelectItem key={model.value} value={model.value}>
+                    {model.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
-              Model identifier (e.g., "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku")
+              Select which model to use with OpenRouter
             </p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="provider">Preferred Provider</Label>
             <Select
-              id="provider"
               value={preferredProvider}
-              onChange={(e) => {
-                const value = e.target.value as "openai" | "anthropic" | "openrouter";
-                setPreferredProvider(value);
+              onValueChange={(value) => {
+                setPreferredProvider(value as "openai" | "anthropic" | "openrouter");
               }}
             >
-              <option value="openai">OpenAI (GPT-4o-mini)</option>
-              <option value="anthropic">Anthropic (Claude 3.5 Haiku)</option>
-              <option value="openrouter">OpenRouter</option>
+              <SelectTrigger id="provider">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai">OpenAI (GPT-4o-mini)</SelectItem>
+                <SelectItem value="anthropic">Anthropic (Claude 3.5 Haiku)</SelectItem>
+                <SelectItem value="openrouter">OpenRouter</SelectItem>
+              </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
               Select which AI provider to use by default
