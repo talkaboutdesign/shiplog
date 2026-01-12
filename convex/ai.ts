@@ -46,6 +46,8 @@ const ImpactAnalysisSchema = z.object({
 
 const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub activity into clear, concise summaries for non-technical stakeholders.
 
+IMPORTANT: You MUST respond with valid JSON only. Do not include any text before or after the JSON object.
+
 Your summaries should:
 - Lead with WHAT changed and WHY it matters (business impact)
 - Use plain English, avoid technical jargon
@@ -64,7 +66,9 @@ For the category, choose the most appropriate:
 - refactor: Code improvement without behavior change
 - docs: Documentation updates
 - chore: Maintenance, dependencies, tooling
-- security: Security-related changes`;
+- security: Security-related changes
+
+When multiple commits are present, synthesize them into a single coherent summary that captures the overall change.`;
 
 function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: string, modelName?: string) {
   if (provider === "openai") {
@@ -125,7 +129,11 @@ ${commitMessages || "No commit messages available"}`;
     }
   }
 
-  prompt += `\n\nSummarize what was accomplished in this push, focusing on the actual code changes.`;
+  if (commits.length > 1) {
+    prompt += `\n\nIMPORTANT: This push contains ${commits.length} commits. Synthesize them into a single coherent summary that captures the overall change. Focus on the combined impact rather than listing each commit individually.`;
+  }
+
+  prompt += `\n\nSummarize what was accomplished in this push, focusing on the actual code changes. Return your response as valid JSON matching the required schema.`;
   return prompt;
 }
 
@@ -325,12 +333,79 @@ export const digestEvent = internalAction({
       const model = getModel(preferredProvider, apiKey, modelName);
       const prompt = buildEventPrompt(event, fileDiffs);
 
-      const { object } = await generateObject({
-        model,
-        schema: DigestSchema,
-        system: DIGEST_SYSTEM_PROMPT,
-        prompt,
-      });
+      // Helper function to parse text response as fallback
+      const parseTextResponse = (text: string): z.infer<typeof DigestSchema> | null => {
+        try {
+          // Try to extract JSON from text if it's wrapped
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return DigestSchema.parse(parsed);
+          }
+          
+          // Try to parse structured text format
+          const titleMatch = text.match(/Title:\s*(.+?)(?:\n|$)/i);
+          const categoryMatch = text.match(/Category:\s*(\w+)/i);
+          const summaryMatch = text.match(/Summary:\s*([\s\S]+?)(?:\n\n|Key Changes:|$)/i);
+          const whyMatch = text.match(/Why.*?:\s*([\s\S]+?)(?:\n\n|$)/i);
+          
+          if (titleMatch && categoryMatch && summaryMatch) {
+            const category = categoryMatch[1].toLowerCase();
+            if (["feature", "bugfix", "refactor", "docs", "chore", "security"].includes(category)) {
+              return {
+                title: titleMatch[1].trim(),
+                summary: summaryMatch[1].trim(),
+                category: category as any,
+                whyThisMatters: whyMatch?.[1]?.trim() || summaryMatch[1].trim(),
+              };
+            }
+          }
+        } catch (e) {
+          // Failed to parse
+        }
+        return null;
+      };
+
+      // Retry logic for generateObject
+      let object: z.infer<typeof DigestSchema> | null = null;
+      const maxRetries = 3;
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const result = await generateObject({
+            model,
+            schema: DigestSchema,
+            system: DIGEST_SYSTEM_PROMPT,
+            prompt: attempt > 0 ? `${prompt}\n\nRemember: Respond with valid JSON only, no additional text.` : prompt,
+          });
+          object = result.object;
+          break; // Success, exit retry loop
+        } catch (error: any) {
+          // If we got a text response, try to parse it
+          if (error.text || error.cause?.text) {
+            const textResponse = error.text || error.cause?.text;
+            const parsed = parseTextResponse(textResponse);
+            if (parsed) {
+              console.log("Successfully parsed text response as fallback");
+              object = parsed;
+              break; // Successfully parsed, exit retry loop
+            }
+          }
+          
+          // If this is the last attempt, throw the error
+          if (attempt === maxRetries - 1) {
+            console.error(`Failed to generate digest after ${maxRetries} attempts:`, error);
+            throw error;
+          }
+          
+          // Wait before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+        }
+      }
+
+      if (!object) {
+        throw new Error("Failed to generate digest object after all retries");
+      }
 
       // 8. Update digest with AI-generated content (title, summary, category, whyThisMatters)
       await ctx.runMutation(internal.digests.update, {
