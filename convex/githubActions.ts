@@ -14,36 +14,9 @@ export const syncInstallation = internalAction({
     installationId: v.number(),
   },
   handler: async (ctx, args) => {
-    const rawConfig = getGitHubAppConfig();
-    
-    // Convert key to PKCS#8 format if needed (GitHub generates PKCS#1)
-    // universal-github-app-jwt requires PKCS#8 (-----BEGIN PRIVATE KEY-----)
-    let privateKey = rawConfig.privateKey;
-    
-    if (privateKey.includes("BEGIN RSA PRIVATE KEY")) {
-      try {
-        const { createPrivateKey } = require("crypto");
-        // Try to create the key object - this will validate the format
-        const keyObject = createPrivateKey(privateKey);
-        privateKey = keyObject.export({
-          type: "pkcs8",
-          format: "pem",
-        }) as string;
-      } catch (error) {
-        console.error("Error converting private key:", error);
-        console.error("Private key preview (first 100 chars):", privateKey.substring(0, 100));
-        console.error("Private key preview (last 100 chars):", privateKey.substring(privateKey.length - 100));
-        throw new Error(
-          `Failed to convert private key from PKCS#1 to PKCS#8: ${error instanceof Error ? error.message : "Unknown error"}. ` +
-          `Please ensure the GITHUB_APP_PRIVATE_KEY environment variable is set correctly (base64-encoded or with \\n for newlines).`
-        );
-      }
-    }
-    
-    const config = {
-      ...rawConfig,
-      privateKey,
-    };
+    // @octokit/auth-app supports both PKCS#1 and PKCS#8 formats in Node.js
+    // No conversion needed - use the key directly from getGitHubAppConfig
+    const config = getGitHubAppConfig();
     const repos = await getInstallationRepos(config, args.installationId);
 
     // For MVP, just take the first repo

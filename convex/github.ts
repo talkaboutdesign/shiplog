@@ -28,11 +28,20 @@ export function getGitHubAppConfig(): GitHubAppConfig {
     throw new Error("GitHub App configuration missing");
   }
 
+  // Debug: Log initial key state (only first/last 50 chars for security)
+  console.log("Raw key from env - length:", privateKey.length);
+  console.log("Raw key from env - first 50:", privateKey.substring(0, 50));
+  console.log("Raw key from env - has BEGIN:", privateKey.includes("BEGIN"));
+  console.log("Raw key from env - has literal \\n:", privateKey.includes("\\n"));
+  console.log("Raw key from env - has actual \\n:", privateKey.includes("\n"));
+
   // Handle base64-encoded private key (recommended for Convex)
   // If the key doesn't start with "-----BEGIN", assume it's base64-encoded
   if (!privateKey.includes("BEGIN")) {
     try {
+      console.log("Decoding base64 key...");
       privateKey = Buffer.from(privateKey, "base64").toString("utf-8");
+      console.log("Base64 decoded - has BEGIN:", privateKey.includes("BEGIN"));
     } catch (error) {
       throw new Error(
         `Failed to decode base64 private key: ${error instanceof Error ? error.message : "Unknown error"}`
@@ -43,10 +52,23 @@ export function getGitHubAppConfig(): GitHubAppConfig {
   // Handle different private key formats:
   // Replace literal \n (backslash + n) with actual newlines
   // This handles both base64-decoded keys and directly pasted keys
+  // Need to handle both escaped and double-escaped cases
+  const beforeReplace = privateKey;
   privateKey = privateKey.replace(/\\n/g, "\n");
+  privateKey = privateKey.replace(/\\\\n/g, "\n"); // Handle double-escaped
+  
+  if (beforeReplace !== privateKey) {
+    console.log("Replaced literal \\n with actual newlines");
+  }
+  
+  // Trim whitespace that might cause issues
+  privateKey = privateKey.trim();
   
   // Also handle Windows-style line endings if present
   privateKey = privateKey.replace(/\r\n/g, "\n");
+  
+  console.log("After processing - has actual newlines:", privateKey.includes("\n"));
+  console.log("After processing - line count:", privateKey.split("\n").length);
   
   // Ensure proper PEM format
   if (!privateKey.includes("BEGIN") || !privateKey.includes("PRIVATE KEY")) {
