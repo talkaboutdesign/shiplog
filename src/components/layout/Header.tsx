@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
 import { RepoSelector } from "./RepoSelector";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface HeaderProps {
   actions?: React.ReactNode;
@@ -46,6 +47,7 @@ export function Header({ actions }: HeaderProps) {
         <div className="flex items-center gap-3">
           <RepoSelector />
           {actions}
+          <ThemeToggle />
           <UserButton />
         </div>
       </div>
