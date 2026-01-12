@@ -44,10 +44,17 @@ export const getRepositoryIndexStatus = query({
       return null;
     }
 
+    // Get surface count
+    const surfaces = await ctx.db
+      .query("codeSurfaces")
+      .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId))
+      .collect();
+
     return {
       indexStatus: repository.indexStatus || "pending",
       indexedAt: repository.indexedAt,
       indexError: repository.indexError,
+      surfaceCount: surfaces.length,
     };
   },
 });
@@ -94,6 +101,19 @@ export const getSurfacesByPaths = internalQuery({
       .collect();
 
     return surfaces.filter((surface) => args.filePaths.includes(surface.filePath));
+  },
+});
+
+// Get surfaces by IDs
+export const getSurfacesByIds = query({
+  args: {
+    surfaceIds: v.array(v.id("codeSurfaces")),
+  },
+  handler: async (ctx, args) => {
+    const surfaces = await Promise.all(
+      args.surfaceIds.map((id) => ctx.db.get(id))
+    );
+    return surfaces.filter((s): s is NonNullable<typeof s> => s !== null);
   },
 });
 

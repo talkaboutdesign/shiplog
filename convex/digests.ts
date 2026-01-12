@@ -210,3 +210,19 @@ export const getPerspectivesByDigest = query({
       .collect();
   },
 });
+
+export const getEventByDigest = query({
+  args: { digestId: v.id("digests") },
+  handler: async (ctx, args) => {
+    const digest = await ctx.db.get(args.digestId);
+    if (!digest) {
+      return null;
+    }
+
+    // Verify repository ownership
+    const user = await getCurrentUser(ctx);
+    await verifyRepositoryOwnership(ctx, digest.repositoryId, user._id);
+
+    return await ctx.db.get(digest.eventId);
+  },
+});
