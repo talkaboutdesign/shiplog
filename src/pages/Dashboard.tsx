@@ -22,7 +22,7 @@ export function Dashboard() {
   const activeRepos = useQuery(api.repositories.getAllActive);
   const [filters, setFilters] = useState<FeedFiltersType>({
     eventType: "all",
-    timeRange: "all",
+    timeRange: "7d",
   });
 
   // Get digests and events from all active repos
@@ -161,10 +161,10 @@ function MultiRepoActivityFeed({
 
   // Calculate time range threshold
   const now = Date.now();
-  const timeRangeThreshold = 
+  const timeRangeThreshold =
     filters.timeRange === "24h" ? now - 24 * 60 * 60 * 1000 :
     filters.timeRange === "7d" ? now - 7 * 24 * 60 * 60 * 1000 :
-    null;
+    now - 30 * 24 * 60 * 60 * 1000; // 30d
 
   // Filter digests
   const filteredDigests = digests.filter((digest) => {
@@ -181,12 +181,10 @@ function MultiRepoActivityFeed({
     }
 
     // Filter by time range (use digest createdAt, but also check event occurredAt for consistency)
-    if (timeRangeThreshold !== null) {
-      // Use the earlier of the two timestamps to be inclusive
-      const relevantTimestamp = Math.min(digest.createdAt, event.occurredAt);
-      if (relevantTimestamp < timeRangeThreshold) {
-        return false;
-      }
+    // Use the earlier of the two timestamps to be inclusive
+    const relevantTimestamp = Math.min(digest.createdAt, event.occurredAt);
+    if (relevantTimestamp < timeRangeThreshold) {
+      return false;
     }
 
     // Filter by contributor

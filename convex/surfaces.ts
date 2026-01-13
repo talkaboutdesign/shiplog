@@ -50,22 +50,29 @@ export const getRepositoryIndexStatus = query({
       return null;
     }
 
-    // Get surface count
+    // Get surface count efficiently - avoid loading all surfaces into memory
+    // Convex doesn't have a native count, so we use take() with a reasonable limit
+    // and indicate if there are more
+    const maxCount = 1000;
     const surfaces = await ctx.db
       .query("codeSurfaces")
       .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId))
-      .collect();
+      .take(maxCount + 1);
+
+    const surfaceCount = surfaces.length > maxCount ? maxCount : surfaces.length;
+    const hasMoreSurfaces = surfaces.length > maxCount;
 
     return {
       indexStatus: repository.indexStatus || "pending",
       indexedAt: repository.indexedAt,
       indexError: repository.indexError,
-      surfaceCount: surfaces.length,
+      surfaceCount,
+      hasMoreSurfaces,
     };
   },
 });
 
-// Get surfaces for a repository
+// Get surfaces for a repository with pagination
 export const getSurfacesByRepository = query({
   args: {
     repositoryId: v.id("repositories"),
@@ -80,13 +87,16 @@ export const getSurfacesByRepository = query({
         v.literal("other")
       )
     ),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    
+
     // Verify repository ownership before returning surfaces
     await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
-    
+
+    const limit = args.limit || 100; // Default to 100 surfaces per request
+
     let query = ctx.db
       .query("codeSurfaces")
       .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId));
@@ -95,7 +105,7 @@ export const getSurfacesByRepository = query({
       query = query.filter((q) => q.eq(q.field("surfaceType"), args.surfaceType));
     }
 
-    return await query.collect();
+    return await query.take(limit);
   },
 });
 
