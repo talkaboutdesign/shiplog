@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import ReactMarkdown from "react-markdown";
 import { api } from "../../../convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,13 +25,13 @@ interface ImpactAnalysisProps {
   isProcessing?: boolean;
 }
 
-export function ImpactAnalysis({ 
-  impactAnalysis, 
-  repositoryId: _repositoryId, 
-  repositoryFullName,
+export function ImpactAnalysis({
+  impactAnalysis,
+  repositoryId: _repositoryId,
+  repositoryFullName: _repositoryFullName,
   digestMetadata,
-  event, 
-  isProcessing = false 
+  event,
+  isProcessing = false
 }: ImpactAnalysisProps) {
   const [showFiles, setShowFiles] = useState(false);
 
@@ -143,7 +144,7 @@ export function ImpactAnalysis({
             </Button>
             {showFiles && (
               <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">
-                {event?.fileDiffs?.map((file, index) => (
+                {event?.fileDiffs?.map((_file, index) => (
                   <Skeleton
                     key={index}
                     className="h-4 w-full"
@@ -186,9 +187,16 @@ export function ImpactAnalysis({
 
         {/* Overall Explanation - Always visible */}
         {impactAnalysis.overallExplanation ? (
-          <div className="text-sm leading-relaxed">
-            <p>{impactAnalysis.overallExplanation}</p>
-          </div>
+          // Check if this is the fallback state (confidence 0, no surfaces)
+          impactAnalysis.confidence === 0 && impactAnalysis.affectedSurfaces?.length === 0 ? (
+            <div className="text-sm text-muted-foreground italic">
+              {impactAnalysis.overallExplanation}
+            </div>
+          ) : (
+            <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
+              <ReactMarkdown>{impactAnalysis.overallExplanation}</ReactMarkdown>
+            </div>
+          )
         ) : (
           <div className="space-y-2">
             <Skeleton className="h-4 w-full" />

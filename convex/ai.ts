@@ -28,20 +28,38 @@ const DigestSchema = z.object({
   perspectives: z.array(PerspectiveSchema).max(2).optional().describe("1-2 key perspectives on this change (e.g., bugfix, ui, feature, security, performance, refactor, docs). Only include the most relevant perspectives."),
 });
 
+// Simplified schema - file-level analysis, backend maps to surfaces
 const ImpactAnalysisSchema = z.object({
-  affectedSurfaces: z.array(
+  affectedFiles: z.array(
     z.object({
-      filePath: z.string(),
-      surfaceName: z.string(),
-      impactType: z.enum(["modified", "added", "deleted"]),
+      filePath: z.string().describe("The file path from the diff"),
       riskLevel: z.enum(["low", "medium", "high"]),
+      briefReason: z.string().describe("One-line explanation of risk"),
       confidence: z.number().min(0).max(100),
     })
-  ),
+  ).max(10),
   overallRisk: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(100),
-  overallExplanation: z.string().describe("Brief senior engineer summary. Focus on: critical bugs/security issues, patterns of concern, high-impact changes, red flags. Be specific with examples. If nothing concerning, note why. Be concise. Do NOT start with 'Overall Assessment:' or repeat risk level (it's in the tag). Do NOT explain confidence scores."),
+  overallExplanation: z.string().describe("2-3 sentence senior engineer summary in markdown. Use **bold** for critical issues, `code` for function names. Never start with 'Overall Assessment:'."),
 });
+
+const IMPACT_ANALYSIS_SYSTEM_PROMPT = `You are a senior engineer performing rapid code review. Identify critical issues in code changes.
+
+Focus on these 3 categories ONLY:
+1. SECURITY: SQL injection, XSS, auth bypass, exposed secrets, CSRF
+2. CRITICAL BUGS: Null/undefined access, race conditions, type errors, logic flaws
+3. BREAKING CHANGES: API contract changes, removed functionality, incompatible modifications
+
+Guidelines:
+- Be concise and specific - cite exact code when flagging issues
+- Use surface dependency counts for context but analyze only the changed code
+- Default to "low" risk if no issues found
+- High confidence (80-100) = clear evidence; Medium (50-79) = potential concern; Low (20-49) = uncertain
+
+FORMATTING RULES:
+- Never use emojis
+- Never use emdash (-) - use regular dash (-) or comma instead
+- Use markdown: **bold** for critical findings, \`code\` for function/variable names`;
 
 const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub activity into clear, concise summaries for non-technical stakeholders.
 
@@ -57,7 +75,7 @@ REQUIRED JSON FIELDS (use these exact field names):
 Your summaries should:
 - Lead with WHAT changed and WHY it matters (business impact)
 - Use plain English, avoid technical jargon
-- Be scannable—someone should understand the gist in 5 seconds
+- Be scannable - someone should understand the gist in 5 seconds
 - Focus on user-facing impact when possible
 
 For the title: Write a brief, action-oriented phrase (e.g., "Added dark mode support", "Fixed checkout crash on mobile")
@@ -78,7 +96,12 @@ For whyThisMatters: Write 1-2 sentences explaining the business or user impact. 
 
 For perspectives: Include 1-2 of the most relevant perspectives from: bugfix, ui, feature, security, performance, refactor, docs. Each perspective should have a focused title and summary from that perspective's viewpoint. Only include perspectives that are clearly relevant to this change.
 
-When multiple commits are present, synthesize them into a single coherent summary that captures the overall change.`;
+When multiple commits are present, synthesize them into a single coherent summary that captures the overall change.
+
+FORMATTING RULES:
+- Never use emojis in any field
+- Never use emdash (-) - use regular dash (-) or comma instead
+- Keep language professional and scannable`;
 
 function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: string, modelName?: string) {
   if (provider === "openai") {
@@ -90,7 +113,7 @@ function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: strin
   } else {
     // openrouter
     const model = modelName || "openai/gpt-4o-mini";
-    
+
     // For Anthropic models through OpenRouter, use Anthropic SDK with OpenRouter baseURL
     // This ensures proper structured output support (tool calling works correctly)
     // Reference: https://ai-sdk.dev/docs/guides/providers/anthropic
@@ -103,14 +126,35 @@ function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: strin
       // OpenRouter expects the full model identifier (e.g., "anthropic/claude-3-5-haiku")
       return anthropic(model);
     }
-    
+
     // For OpenAI and other models, use OpenAI SDK provider with OpenRouter baseURL
     // Reference: https://openrouter.ai/docs/quickstart
-    const openrouter = createOpenAI({ 
+    const openrouter = createOpenAI({
       apiKey,
       baseURL: "https://openrouter.ai/api/v1",
     });
     return openrouter(model);
+  }
+}
+
+/**
+ * Get the fastest model for the given provider - used for impact analysis
+ * Always selects the fastest available model regardless of user's preferred model
+ */
+function getFastModel(provider: "openai" | "anthropic" | "openrouter", apiKey: string) {
+  if (provider === "openai") {
+    const openai = createOpenAI({ apiKey });
+    return openai("gpt-4o-mini");
+  } else if (provider === "anthropic") {
+    const anthropic = createAnthropic({ apiKey });
+    return anthropic("claude-3-5-haiku-latest");
+  } else {
+    // OpenRouter - always use gpt-4o-mini for speed
+    const openrouter = createOpenAI({
+      apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+    return openrouter("openai/gpt-4o-mini");
   }
 }
 
@@ -514,192 +558,32 @@ export const digestEvent = internalAction({
         });
       }
 
-      // 11. Prepare for impact analysis: fetch surfaces if needed
-      const surfacesPromise = repository.indexStatus === "completed" && fileDiffs && fileDiffs.length > 0
-        ? ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
+      // 11. Schedule async impact analysis (non-blocking)
+      // Impact analysis runs in background - digest shows immediately
+      if (repository.indexStatus === "completed" && fileDiffs && fileDiffs.length > 0) {
+        // Prepare truncated file diffs for the async action
+        const truncatedFileDiffs = fileDiffs
+          .filter((f) => f.patch && f.patch.length > 0)
+          .sort((a, b) => (b.additions + b.deletions) - (a.additions + a.deletions)) // Prioritize larger changes
+          .slice(0, 8) // Limit to 8 files
+          .map((f) => ({
+            filename: f.filename,
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            patch: f.patch?.substring(0, 2500), // Truncate patches
+          }));
+
+        if (truncatedFileDiffs.length > 0) {
+          await ctx.scheduler.runAfter(0, internal.ai.analyzeImpactAsync, {
+            digestId,
             repositoryId: event.repositoryId,
-            filePaths: fileDiffs.map((f) => f.filename),
-          })
-        : Promise.resolve([]);
-
-      // 12. Generate impact analysis
-      const impactAnalysisPromise = (async () => {
-        try {
-          const surfaces = await surfacesPromise;
-          
-          if (surfaces.length === 0 || !fileDiffs || fileDiffs.length === 0) {
-            return undefined;
-          }
-
-          // Build prompt with actual code changes
-          const filesWithPatches = fileDiffs
-            .filter((f) => f.patch && f.patch.length > 0)
-            .slice(0, 20); // Limit to avoid token limits
-          
-          const filesWithoutPatches = fileDiffs.filter(
-            (f) => !f.patch || f.patch.length === 0
-          );
-
-          // Create a map of file path to surfaces for quick lookup
-          const surfacesByPath = new Map<string, Array<typeof surfaces[0]>>();
-          surfaces.forEach((s) => {
-            if (!surfacesByPath.has(s.filePath)) {
-              surfacesByPath.set(s.filePath, []);
-            }
-            surfacesByPath.get(s.filePath)!.push(s);
+            fileDiffs: truncatedFileDiffs,
           });
-
-          // Build structured code changes with context
-          const structuredChanges = filesWithPatches.map((f) => {
-            const fileSurfaces = surfacesByPath.get(f.filename) || [];
-            const patchPreview = f.patch!.length > 10000 
-              ? f.patch!.substring(0, 10000) + "\n... (truncated)"
-              : f.patch!;
-            
-            let context = `File: ${f.filename} (${f.status}, +${f.additions} -${f.deletions})`;
-            
-            if (fileSurfaces.length > 0) {
-              const surfaceInfo = fileSurfaces.map((s) => {
-                const deps = s.dependencies.length > 0 
-                  ? `\n  Dependencies: ${s.dependencies.slice(0, 5).join(", ")}${s.dependencies.length > 5 ? ` (+${s.dependencies.length - 5} more)` : ""}`
-                  : "";
-                const exports = s.exports && s.exports.length > 0
-                  ? `\n  Exports: ${s.exports.slice(0, 5).join(", ")}${s.exports.length > 5 ? ` (+${s.exports.length - 5} more)` : ""}`
-                  : "";
-                return `  - ${s.name} (${s.surfaceType})${deps}${exports}`;
-              }).join("\n");
-              context += `\nKnown surfaces in this file:\n${surfaceInfo}`;
-            }
-            
-            return `${context}\n\nCode diff:\n${patchPreview}`;
-          }).join("\n\n---\n\n");
-
-          const impactPrompt = `You're a senior engineer reviewing code changes. Systematically scan the code for bugs, security issues, and potential problems. Be specific and actionable.
-
-=== CODE CHANGES ===
-
-${structuredChanges}
-
-${filesWithoutPatches.length > 0 
-  ? `\nFiles changed without patch data:\n${filesWithoutPatches.map((f) => `- ${f.filename} (${f.status}): +${f.additions} -${f.deletions}`).join("\n")}` 
-  : ""}
-
-=== SCANNING GUIDELINES ===
-
-For each file, systematically check:
-
-1. **Security Issues:**
-   - SQL injection, XSS, CSRF vulnerabilities
-   - Unsanitized user input
-   - Missing authentication/authorization checks
-   - Exposed secrets, API keys, or credentials
-   - Insecure dependencies or outdated packages
-
-2. **Bugs & Logic Errors:**
-   - Null/undefined access without checks
-   - Off-by-one errors, array bounds
-   - Race conditions, async/await issues
-   - Type mismatches, incorrect type handling
-   - Missing return statements or early returns
-   - Incorrect conditional logic
-
-3. **Error Handling:**
-   - Missing try/catch blocks
-   - Unhandled promise rejections
-   - Silent failures
-   - Poor error messages
-
-4. **Performance Issues:**
-   - N+1 queries, inefficient loops
-   - Missing memoization where needed
-   - Large bundle sizes, unnecessary imports
-   - Memory leaks (event listeners, subscriptions)
-
-5. **Code Quality:**
-   - Breaking changes to APIs/contracts
-   - Removed functionality without migration
-   - Inconsistent patterns with codebase
-   - Missing tests for critical paths
-
-6. **Dependency Impact:**
-   - Files with many dependencies (high coupling) are riskier
-   - Changes to exported APIs affect downstream code
-   - Breaking changes to shared utilities/services
-
-=== ANALYSIS TASK ===
-
-For each affected surface (match file paths to known surfaces):
-1. Impact type: modified/added/deleted
-2. Risk level (low/medium/high):
-   - LOW: Minor changes, well-isolated, no bugs spotted
-   - MEDIUM: Moderate changes, some dependencies, minor concerns
-   - HIGH: Major changes, many dependencies, bugs/issues found, security concerns
-3. Confidence (0-100):
-   - 80-100: Clear understanding, complete context, obvious issues or clean code
-   - 50-79: Good understanding but some ambiguity
-   - 20-49: Limited context or unclear changes
-   - 0-19: Very unclear, missing critical context
-
-Overall assessment:
-Provide overall risk level and write like briefing a senior engineer. Focus on:
-- Critical bugs or security issues found
-- Patterns of concern across files
-- High-impact changes (many dependencies, breaking changes)
-- Any red flags that need immediate attention
-Be concise and specific. Do NOT start with "Overall Assessment:" or repeat the risk level (it's in the tag). Do NOT explain confidence scores.`;
-
-          const { object: impact } = await generateObject({
-            model,
-            schema: ImpactAnalysisSchema,
-            prompt: impactPrompt,
-          });
-
-          // Map file paths to surface IDs
-          const affectedSurfaces = impact.affectedSurfaces
-            .map((af) => {
-              const surface = surfaces.find((s) => s.filePath === af.filePath);
-              if (!surface) {
-                return null; // Skip if no matching surface found
-              }
-              return {
-                surfaceId: surface._id,
-                surfaceName: af.surfaceName || surface.name,
-                impactType: af.impactType,
-                riskLevel: af.riskLevel,
-                confidence: af.confidence,
-              };
-            })
-            .filter((af): af is NonNullable<typeof af> => af !== null);
-
-          if (affectedSurfaces.length > 0) {
-            return {
-              affectedSurfaces,
-              overallRisk: impact.overallRisk,
-              confidence: impact.confidence,
-              overallExplanation: impact.overallExplanation,
-            };
-          }
-          return undefined;
-        } catch (error) {
-          console.error("Error analyzing impact:", error);
-          return undefined;
         }
-      })();
-
-      // 13. Wait for impact analysis to complete
-      const impactAnalysis = repository.indexStatus === "completed" 
-        ? await impactAnalysisPromise 
-        : undefined;
-
-      // 14. Update digest with impact analysis if available
-      if (impactAnalysis) {
-        await ctx.runMutation(internal.digests.update, {
-          digestId,
-          impactAnalysis,
-        });
       }
 
-      // 15. Update event status
+      // 12. Update event status - digest is ready, impact analysis runs in background
       await ctx.runMutation(internal.events.updateStatus, {
         eventId: args.eventId,
         status: "completed",
@@ -832,5 +716,191 @@ Generate a ${perspective}-focused perspective on this change. Provide a title, s
         })),
       });
     }
+  },
+});
+
+/**
+ * Analyze impact asynchronously - runs in background after digest is created
+ * Uses fast model, simplified prompt, and retry logic with graceful fallback
+ */
+export const analyzeImpactAsync = internalAction({
+  args: {
+    digestId: v.id("digests"),
+    repositoryId: v.id("repositories"),
+    fileDiffs: v.array(
+      v.object({
+        filename: v.string(),
+        status: v.string(),
+        additions: v.number(),
+        deletions: v.number(),
+        patch: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    // Get repository and user to access API keys
+    const repository = await ctx.runQuery(internal.repositories.getById, {
+      repositoryId: args.repositoryId,
+    });
+
+    if (!repository) {
+      console.error("Repository not found for impact analysis");
+      return;
+    }
+
+    const user = await ctx.runQuery(internal.users.getById, {
+      userId: repository.userId,
+    });
+
+    if (!user || !user.apiKeys) {
+      console.error("User or API keys not found for impact analysis");
+      return;
+    }
+
+    const preferredProvider = user.apiKeys.preferredProvider || "openai";
+    const apiKey =
+      preferredProvider === "openai"
+        ? user.apiKeys.openai
+        : preferredProvider === "anthropic"
+        ? user.apiKeys.anthropic
+        : user.apiKeys.openrouter;
+
+    if (!apiKey) {
+      console.error(`No ${preferredProvider} API key configured for impact analysis`);
+      return;
+    }
+
+    // Use fast model for impact analysis
+    const fastModel = getFastModel(preferredProvider, apiKey);
+
+    // Get surfaces for the files
+    const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
+      repositoryId: args.repositoryId,
+      filePaths: args.fileDiffs.map((f) => f.filename),
+    });
+
+    if (surfaces.length === 0) {
+      console.log("No surfaces found for impact analysis - skipping");
+      return;
+    }
+
+    // Create a map of file path to surfaces for quick lookup
+    const surfacesByPath = new Map<string, Array<typeof surfaces[0]>>();
+    surfaces.forEach((s) => {
+      if (!surfacesByPath.has(s.filePath)) {
+        surfacesByPath.set(s.filePath, []);
+      }
+      surfacesByPath.get(s.filePath)!.push(s);
+    });
+
+    // Build simplified structured changes with compact surface context
+    const structuredChanges = args.fileDiffs
+      .filter((f) => f.patch)
+      .map((f) => {
+        const fileSurfaces = surfacesByPath.get(f.filename) || [];
+        // Compact surface info: just name + dep count
+        const surfaceContext = fileSurfaces.length > 0
+          ? `Surfaces: ${fileSurfaces.map((s) => `${s.name} (${s.surfaceType}, ${s.dependencies.length} deps)`).join(", ")}`
+          : "";
+
+        return `### ${f.filename} (${f.status}, +${f.additions} -${f.deletions})
+${surfaceContext}
+
+\`\`\`diff
+${f.patch}
+\`\`\``;
+      })
+      .join("\n\n");
+
+    // Simplified prompt - 3 categories only
+    const impactPrompt = `Analyze these code changes for critical issues.
+
+${structuredChanges}
+
+${args.fileDiffs.filter((f) => !f.patch).length > 0 ? `\n${args.fileDiffs.filter((f) => !f.patch).length} additional files changed without diff data.\n` : ""}
+
+For each file, assess:
+- Risk level (low/medium/high)
+- Brief reason (one line)
+- Confidence (0-100)
+
+Provide overall risk level and 2-3 sentence summary.`;
+
+    // Retry logic with exponential backoff
+    let impactResult: z.infer<typeof ImpactAnalysisSchema> | null = null;
+    const maxRetries = 3;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const { object: impact } = await generateObject({
+          model: fastModel,
+          schema: ImpactAnalysisSchema,
+          system: IMPACT_ANALYSIS_SYSTEM_PROMPT,
+          prompt: impactPrompt,
+        });
+        impactResult = impact;
+        break;
+      } catch (error: any) {
+        console.error(`Impact analysis attempt ${attempt + 1} failed:`, {
+          error: error instanceof Error ? error.message : String(error),
+          attempt,
+        });
+
+        if (attempt < maxRetries - 1) {
+          // Exponential backoff: 1s, 2s, 4s
+          await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+        }
+      }
+    }
+
+    // Graceful fallback if all retries failed
+    if (!impactResult) {
+      console.error("Impact analysis failed after all retries - using fallback");
+      await ctx.runMutation(internal.digests.update, {
+        digestId: args.digestId,
+        impactAnalysis: {
+          affectedSurfaces: [],
+          overallRisk: "low" as const,
+          confidence: 0,
+          overallExplanation: "Impact analysis unavailable for this change. Manual review recommended for significant changes.",
+        },
+      });
+      return;
+    }
+
+    // Map file paths to surface IDs
+    const affectedSurfaces = impactResult.affectedFiles
+      .map((af) => {
+        const matchingSurfaces = surfaces.filter((s) => s.filePath === af.filePath);
+        const primarySurface = matchingSurfaces[0];
+        if (!primarySurface) {
+          return null;
+        }
+        return {
+          surfaceId: primarySurface._id,
+          surfaceName: primarySurface.name,
+          impactType: "modified" as const,
+          riskLevel: af.riskLevel,
+          confidence: af.confidence,
+        };
+      })
+      .filter((af): af is NonNullable<typeof af> => af !== null);
+
+    // Update digest with impact analysis
+    await ctx.runMutation(internal.digests.update, {
+      digestId: args.digestId,
+      impactAnalysis: {
+        affectedSurfaces,
+        overallRisk: impactResult.overallRisk,
+        confidence: impactResult.confidence,
+        overallExplanation: impactResult.overallExplanation,
+      },
+    });
+
+    console.log(`Impact analysis completed for digest ${args.digestId}:`, {
+      filesAnalyzed: args.fileDiffs.length,
+      surfacesAffected: affectedSurfaces.length,
+      overallRisk: impactResult.overallRisk,
+    });
   },
 });

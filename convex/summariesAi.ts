@@ -47,15 +47,24 @@ type SummaryData = {
 };
 
 // Helper to transform AI response (array format) to database format (object format)
+// Normalizes percentages from counts to handle rounding issues
 function transformToSummaryData(
   aiResponse: z.infer<typeof SummarySchema>,
   digestCount: number
 ): SummaryData {
-  // Convert workBreakdownItems array to workBreakdown object
+  // Calculate actual total from counts for normalization
+  const totalFromCounts = aiResponse.workBreakdownItems.reduce((sum, item) => sum + item.count, 0);
+
+  // Convert workBreakdownItems array to workBreakdown object with normalized percentages
   const workBreakdown: SummaryData["workBreakdown"] = {};
   for (const item of aiResponse.workBreakdownItems) {
+    // Recalculate percentage from counts to ensure accuracy
+    const normalizedPercentage = totalFromCounts > 0
+      ? Math.round((item.count / totalFromCounts) * 100)
+      : 0;
+
     workBreakdown[item.category] = {
-      percentage: item.percentage,
+      percentage: normalizedPercentage,
       count: item.count,
     };
   }
@@ -77,7 +86,7 @@ Your reports should:
 - Lead with business impact and outcomes
 - Use concrete numbers and metrics when available
 - Connect work to company goals and strategy
-- Use accessible language—avoid jargon; explain technical terms
+- Use accessible language - avoid jargon, explain technical terms
 - Show trends and context (what's improving, what's new)
 - Focus on what matters to different stakeholders
 
@@ -91,9 +100,14 @@ For accomplishments: Write 2-3 paragraphs describing:
 
 For key features: List 5-10 of the most important features/changes shipped, written as brief bullet points.
 
-For workBreakdownItems: Provide an array of work categories with their percentage and count. Only include categories that have items (don't include categories with 0 items). Valid categories are: feature, bugfix, refactor, docs, chore, security.
+For workBreakdownItems: Provide an array of work categories with their percentage and count. Only include categories that have items (don't include categories with 0 items). Valid categories are: feature, bugfix, refactor, docs, chore, security. Calculate percentages from counts.
 
-For totalItems: Provide the total count of digests/items being summarized.`;
+For totalItems: Provide the total count of digests/items being summarized.
+
+FORMATTING RULES:
+- Never use emojis
+- Never use emdash (-) - use regular dash (-) or comma instead
+- Keep language professional and executive-focused`;
 
 const INCREMENTAL_UPDATE_SYSTEM_PROMPT = `You are updating an existing executive development report by incorporating a new digest.
 
@@ -108,7 +122,12 @@ Your task:
 - Update totalItems to reflect the new total
 - Maintain the executive-level tone and focus on business impact
 
-Be strategic: If the new digest is minor, make minimal changes. If it's significant, update more substantially.`;
+Be strategic: If the new digest is minor, make minimal changes. If it's significant, update more substantially.
+
+FORMATTING RULES:
+- Never use emojis
+- Never use emdash (-) - use regular dash (-) or comma instead
+- Keep language professional and executive-focused`;
 
 function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: string, modelName?: string) {
   if (provider === "openai") {
