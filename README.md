@@ -11,7 +11,7 @@ Transform GitHub noise into stakeholder-friendly briefings. ShipLog is a real-ti
 - Node.js 20.19+ or 22.12+
 - Bun (install with `curl -fsSL https://bun.sh/install | bash`)
 - GitHub account with a test repository
-- OpenAI or Anthropic API key for testing
+- API key from OpenAI, Anthropic, or OpenRouter
 
 ### 1. Clone and Install
 
@@ -54,14 +54,11 @@ bun install
 
 **Permissions:**
 - Contents: Read-only
-- Issues: Read-only
 - Metadata: Read-only (required)
 - Pull requests: Read-only
 
 **Events to Subscribe:**
-- Issues
 - Pull request
-- Pull request review
 - Push
 
 **After Creation:**
@@ -124,9 +121,9 @@ After deploying to Convex:
 
 1. **Sign In**: Authenticate with GitHub via Clerk
 2. **Install App**: Install ShipLog GitHub App on your repository
-3. **Configure API Keys**: Add your OpenAI or Anthropic API key in Settings
+3. **Configure API Keys**: Add your OpenAI, Anthropic, or OpenRouter API key in Settings
 4. **Automatic Indexing**: ShipLog automatically indexes your codebase structure (happens in background)
-5. **Watch Activity**: Push commits, open PRs, or create issues → Enhanced AI digests appear automatically with:
+5. **Watch Activity**: Push commits or open PRs → Enhanced AI digests appear automatically with:
    - Deep code analysis (actual file diffs, not just commit messages)
    - Impact assessment (which components/services are affected)
    - Multiple perspectives (BUGFIX, UI, FEATURE, etc.)
@@ -143,10 +140,12 @@ After deploying to Convex:
 ## Features
 
 - ✅ Real-time GitHub activity feed
-- ✅ AI-powered event summaries (OpenAI GPT-4o-mini or Anthropic Claude 3.5 Haiku)
-- ✅ Support for push, PR, issue, and PR review events
-- ✅ Filter by event type, contributor, and time range
+- ✅ AI-powered event summaries (OpenAI, Anthropic, or OpenRouter)
+- ✅ Support for push and pull request events
+- ✅ Filter by event type, contributor, and time range (24h, 7d, 30d)
+- ✅ Periodic summaries (daily, weekly, monthly)
 - ✅ Bring Your Own Key (BYOK) for AI providers
+- ✅ Dark/light mode support
 - ✅ **Enhanced AI Analysis** (see below)
 
 ## Enhanced AI Analysis
@@ -236,28 +235,27 @@ Indexing typically completes within a few minutes for small to medium repositori
 shiplog/
 ├── convex/              # Backend (Convex functions)
 │   ├── schema.ts        # Database schema
+│   ├── auth.ts          # Authentication helpers
 │   ├── users.ts         # User management
 │   ├── repositories.ts  # Repository management
 │   ├── events.ts        # Event storage
 │   ├── digests.ts       # Digest queries
+│   ├── summaries.ts     # Periodic summary generation
 │   ├── ai.ts            # AI digest generation
 │   ├── surfaces.ts      # Code surface indexing
 │   ├── github.ts        # GitHub API helpers
 │   └── http.ts          # HTTP routes (webhook, callback)
 ├── src/
-│   ├── components/      # React components
-│   │   ├── feed/       # Feed components
-│   │   │   ├── DigestCard.tsx
-│   │   │   ├── PerspectiveBadges.tsx
-│   │   │   ├── ImpactAnalysis.tsx
-│   │   │   ├── SurfaceImpactBadge.tsx
-│   │   │   └── WhyThisMatters.tsx
-│   │   └── ...
-│   ├── pages/           # Page components
+│   ├── components/
+│   │   ├── ui/          # shadcn/ui components
+│   │   ├── feed/        # Feed components (DigestCard, FeedFilters, etc.)
+│   │   ├── summary/     # Summary components (SummaryView, SummaryTabs)
+│   │   ├── layout/      # Layout components (Header, AppShell)
+│   │   ├── github/      # GitHub integration components
+│   │   └── settings/    # Settings components (ApiKeyDrawer)
+│   ├── pages/           # Page components (Feed, Summary, Dashboard)
 │   ├── hooks/           # Custom React hooks
-│   │   ├── useDigests.ts
-│   │   └── usePerspectives.ts
-│   └── lib/             # Utilities
+│   └── lib/             # Utilities (periodUtils, etc.)
 └── package.json
 ```
 
@@ -271,8 +269,9 @@ shiplog/
 
 ### AI Digests Not Generating
 
-- Ensure API key is configured in Settings
+- Ensure API key is configured in Settings (OpenAI, Anthropic, or OpenRouter)
 - Check that preferred provider matches configured key
+- For OpenRouter, ensure the selected model is available
 - Verify Convex logs for AI API errors
 - Check event status in database (may be "failed" or "skipped")
 
