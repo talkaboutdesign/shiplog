@@ -174,12 +174,14 @@ function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: strin
 
 /**
  * Get the fastest model for the given provider - used for impact analysis
- * For OpenRouter, uses the user's configured model to ensure compatibility
+ * ALWAYS uses the fastest available model regardless of user's selection
+ * - OpenAI: gpt-4o-mini
+ * - Anthropic: claude-3-5-haiku-latest
+ * - OpenRouter: openai/gpt-4o-mini (fastest + most reliable for structured output)
  */
 function getFastModel(
   provider: "openai" | "anthropic" | "openrouter",
-  apiKey: string,
-  userOpenRouterModel?: string
+  apiKey: string
 ) {
   if (provider === "openai") {
     const openai = createOpenAI({ apiKey });
@@ -188,25 +190,13 @@ function getFastModel(
     const anthropic = createAnthropic({ apiKey });
     return anthropic("claude-3-5-haiku-latest");
   } else {
-    // OpenRouter - use user's model if set, otherwise default to gpt-4o-mini
-    const model = userOpenRouterModel || "openai/gpt-4o-mini";
-
-    // For Anthropic models through OpenRouter, use Anthropic SDK
-    // (same logic as getModel for proper structured output support)
-    if (model.startsWith("anthropic/")) {
-      const anthropic = createAnthropic({
-        apiKey,
-        baseURL: "https://openrouter.ai/api/v1",
-      });
-      return anthropic(model);
-    }
-
-    // For OpenAI and other models, use OpenAI SDK
+    // OpenRouter - use gpt-4o-mini for fastest + most reliable structured output
+    // Uses OpenAI SDK with OpenRouter baseURL
     const openrouter = createOpenAI({
       apiKey,
       baseURL: "https://openrouter.ai/api/v1",
     });
-    return openrouter(model);
+    return openrouter("openai/gpt-4o-mini");
   }
 }
 
@@ -497,7 +487,7 @@ export const digestEvent = internalAction({
               };
             }
           }
-        } catch (e) {
+        } catch (_e) {
           // Failed to parse
         }
         return null;
@@ -526,7 +516,7 @@ export const digestEvent = internalAction({
               console.log("Successfully fixed field name mismatch (e.g., 'impact' -> 'whyThisMatters')");
               object = validated;
               break; // Successfully fixed, exit retry loop
-            } catch (parseError) {
+            } catch (_parseError) {
               // If fixing didn't work, continue to other fallbacks
             }
           }
@@ -883,7 +873,7 @@ export const analyzeImpactAsync = internalAction({
     }
 
     // Determine which provider to use - prefer the configured one, but fall back to any available
-    let preferredProvider = user.apiKeys.preferredProvider as "openai" | "anthropic" | "openrouter" | undefined;
+    let preferredProvider = user.apiKeys.preferredProvider;
     let apiKey: string | undefined;
 
     // First try the preferred provider
@@ -914,11 +904,9 @@ export const analyzeImpactAsync = internalAction({
       return;
     }
 
-    // Use fast model for impact analysis
-    // Pass user's OpenRouter model for compatibility (especially for Anthropic models)
-    const userOpenRouterModel = user.apiKeys.openrouterModel;
-    console.log(`Impact analysis using provider: ${preferredProvider}, model: ${userOpenRouterModel || "default"}`);
-    const fastModel = getFastModel(preferredProvider, apiKey, userOpenRouterModel);
+    // Use fast model for impact analysis (always uses fastest model regardless of user selection)
+    console.log(`Impact analysis using provider: ${preferredProvider} (fast model)`);
+    const fastModel = getFastModel(preferredProvider, apiKey);
 
     // Pass 1: Analyze intent from commit context (if available)
     let changeIntent: z.infer<typeof ChangeIntentSchema> | null = null;
