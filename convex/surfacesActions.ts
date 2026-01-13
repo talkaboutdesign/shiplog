@@ -286,6 +286,18 @@ export const indexRepository = internalAction({
         indexError: undefined,
       });
 
+      // Index surfaces into RAG with repository-scoped namespace
+      // Get user from repository
+      const user = await ctx.runQuery(internal.users.getById, {
+        userId: repository.userId,
+      });
+      if (user) {
+        await ctx.runAction(internal.rag.indexer.indexCodeSurfaces, {
+          repositoryId: args.repositoryId,
+          userId: repository.userId,
+        });
+      }
+
       return { indexed: surfaces.length };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";

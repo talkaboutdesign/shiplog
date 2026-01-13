@@ -2,7 +2,6 @@ import { query, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
 import { Id } from "./_generated/dataModel";
-import { internal } from "./_generated/api";
 
 export const create = internalMutation({
   args: {
@@ -78,12 +77,9 @@ export const create = internalMutation({
       createdAt: Date.now(),
     });
 
-    // Trigger summary updates for this digest
-    await ctx.scheduler.runAfter(0, internal.summaries.updateSummariesForDigest, {
-      repositoryId: args.repositoryId,
-      digestId,
-      digestCreatedAt: Date.now(),
-    });
+    // Summary updates are now triggered by workflow onComplete handler
+    // This preserves the flow: digest creation → summary update
+    // The workflow's onComplete handler calls internal.summaries.updateSummariesForDigest
 
     return digestId;
   },

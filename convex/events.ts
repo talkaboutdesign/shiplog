@@ -43,8 +43,10 @@ export const create = internalMutation({
       createdAt: Date.now(),
     });
 
-    // Schedule AI digest action
-    await ctx.scheduler.runAfter(0, internal.ai.digestEvent, {
+    // Start digest generation workflow (replaces scheduler call)
+    // PRESERVES WEBHOOK TRIGGER FLOW
+    // Use scheduler since mutations can't call actions directly
+    await ctx.scheduler.runAfter(0, internal.workflows.digestWorkflow.startDigestWorkflow, {
       eventId,
     });
 

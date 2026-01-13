@@ -27,3 +27,25 @@ export type AIProvider = "openai" | "anthropic" | "openrouter";
 export type GitHubEventType =
   | "push"
   | "pull_request";
+
+// File diff from GitHub API
+export interface FileDiff {
+  filename: string;
+  status: "added" | "removed" | "modified" | "renamed";
+  additions: number;
+  deletions: number;
+  changes?: number;
+  patch?: string;
+  previous_filename?: string;
+}
+
+// Perspective type for digest perspectives
+export type PerspectiveType = "feature" | "bugfix" | "refactor" | "docs" | "security" | "ui" | "performance";
+
+// Perspective generated for digest
+export interface Perspective {
+  perspective: PerspectiveType;
+  title: string;
+  summary: string;
+  confidence: number;
+}

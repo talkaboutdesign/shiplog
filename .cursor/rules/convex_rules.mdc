@@ -214,6 +214,33 @@ export const exampleQuery = query({
 - When using the `Record` type, make sure to always define your records as `const record: Record<KeyType, ValueType> = {...};`
 - Always add `@types/node` to your `package.json` when using any Node.js built-in modules.
 
+### Avoiding TypeScript Errors
+- **Module paths for nested directories**: Convex uses file-based routing. Functions in `convex/foo/bar.ts` are referenced as `internal.foo.bar.*`, NOT `internal.foo.*`. Always verify the path matches the directory structure.
+- **Explicit return types on handlers**: Add explicit return types to break circular type inference:
+```typescript
+handler: async (ctx, args): Promise<{ data: any; id: string }> => { ... }
+```
+- **Arrow function parameter types**: Always type parameters in `.map()`, `.filter()`, `.sort()` callbacks:
+```typescript
+// Good - explicit types
+items.map((item: ItemType) => item.name)
+docs.forEach((d: Doc<"tableName">) => { ... })
+
+// Bad - causes implicit 'any' errors
+items.map((item) => item.name)
+```
+- **Union types for string literals**: Define union types for constrained strings:
+```typescript
+export type Status = "pending" | "completed" | "failed";
+interface Task { status: Status; }  // Not just 'string'
+```
+- **Handle optional to required mappings**: Provide defaults when mapping optional properties to required:
+```typescript
+requiredField: optionalField ?? defaultValue
+```
+- **Remove unused imports**: Remove unused imports to avoid TS6133 errors. Use `_paramName` prefix for intentionally unused parameters.
+- **Convex component libraries**: `Workpool`, `WorkflowManager`, `ActionCache` from @convex-dev packages are NOT generic types. Don't add type parameters like `<any>` to them unless using `ActionCache<any>` to break circular inference.
+
 ## Full text search guidelines
 - A query for "10 messages in channel '#general' that best match the query 'hello hi' in their body" would look like:
 

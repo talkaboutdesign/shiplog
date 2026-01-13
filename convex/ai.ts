@@ -3,6 +3,7 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { Doc } from "./_generated/dataModel";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -12,6 +13,7 @@ import {
   getFileDiffForPush,
   getFileDiffForPR,
 } from "./github";
+import { FileDiff } from "./types";
 
 const PerspectiveSchema = z.object({
   perspective: z.enum(["bugfix", "ui", "feature", "security", "performance", "refactor", "docs"]),
@@ -424,12 +426,12 @@ export const digestEvent = internalAction({
           if (fileDiffs) {
             await ctx.runMutation(internal.events.updateFileDiffs, {
               eventId: args.eventId,
-              fileDiffs: fileDiffs.map((f) => ({
+              fileDiffs: fileDiffs.map((f: FileDiff) => ({
                 filename: f.filename,
                 status: f.status,
                 additions: f.additions,
                 deletions: f.deletions,
-                changes: f.changes,
+                changes: f.changes ?? (f.additions + f.deletions),
                 patch: f.patch?.substring(0, 50000), // Limit patch size
                 previous_filename: f.previous_filename,
               })),
@@ -577,7 +579,7 @@ export const digestEvent = internalAction({
       if (object.category === "feature") relevantPerspectives.push("feature");
       
       // Check file paths for UI components
-      if (fileDiffs?.some((f) => f.filename.match(/\.(tsx|jsx)$/) || f.filename.includes("component"))) {
+      if (fileDiffs?.some((f: FileDiff) => f.filename.match(/\.(tsx|jsx)$/) || f.filename.includes("component"))) {
         relevantPerspectives.push("ui");
       }
       
@@ -605,10 +607,10 @@ export const digestEvent = internalAction({
       if (repository.indexStatus === "completed" && fileDiffs && fileDiffs.length > 0) {
         // Prepare truncated file diffs for the async action
         const truncatedFileDiffs = fileDiffs
-          .filter((f) => f.patch && f.patch.length > 0)
-          .sort((a, b) => (b.additions + b.deletions) - (a.additions + a.deletions)) // Prioritize larger changes
+          .filter((f: FileDiff) => f.patch && f.patch.length > 0)
+          .sort((a: FileDiff, b: FileDiff) => (b.additions + b.deletions) - (a.additions + a.deletions)) // Prioritize larger changes
           .slice(0, 8) // Limit to 8 files
-          .map((f) => ({
+          .map((f: FileDiff) => ({
             filename: f.filename,
             status: f.status,
             additions: f.additions,
@@ -932,8 +934,8 @@ export const analyzeImpactAsync = internalAction({
     }
 
     // Create a map of file path to surfaces for quick lookup
-    const surfacesByPath = new Map<string, Array<typeof surfaces[0]>>();
-    surfaces.forEach((s) => {
+    const surfacesByPath = new Map<string, Array<Doc<"codeSurfaces">>>();
+    surfaces.forEach((s: Doc<"codeSurfaces">) => {
       if (!surfacesByPath.has(s.filePath)) {
         surfacesByPath.set(s.filePath, []);
       }
@@ -1048,8 +1050,9 @@ Provide overall risk level and 2-3 sentence summary focusing on differential ana
 
     // Map file paths to surface IDs
     const affectedSurfaces = impactResult.affectedFiles
-      .map((af) => {
-        const matchingSurfaces = surfaces.filter((s) => s.filePath === af.filePath);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((af: any) => {
+        const matchingSurfaces = surfaces.filter((s: Doc<"codeSurfaces">) => s.filePath === af.filePath);
         const primarySurface = matchingSurfaces[0];
         if (!primarySurface) {
           return null;

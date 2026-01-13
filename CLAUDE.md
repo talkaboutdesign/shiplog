@@ -88,6 +88,56 @@ Use `v.null()` for functions that don't return a value.
 
 Tests use `convex-test` with `vitest` in edge-runtime environment. Test files are in `convex/*.test.ts`.
 
+## TypeScript Best Practices
+
+### Avoiding Common Errors
+
+**Module paths for nested directories:**
+- Convex uses file-based routing with nested directories
+- `convex/rag/searcher.ts` exports become `internal.rag.searcher.*`, NOT `internal.rag.*`
+- `convex/cache/compute.ts` exports become `internal.cache.compute.*`
+- Always verify the full path matches the directory structure
+
+**Explicit return types on handlers:**
+- Add explicit return types to action/mutation handlers to break circular inference:
+```typescript
+handler: async (ctx, args): Promise<{ data: any; id: string }> => { ... }
+```
+
+**Arrow function parameter types:**
+- Always type parameters in `.map()`, `.filter()`, `.sort()` callbacks:
+```typescript
+// Good
+fileDiffs.map((f: FileDiff) => f.filename)
+surfaces.forEach((s: Doc<"codeSurfaces">) => { ... })
+
+// Bad - causes implicit 'any' errors
+fileDiffs.map((f) => f.filename)
+```
+
+**Union types for string literals:**
+- Define union types for constrained string values:
+```typescript
+export type PerspectiveType = "feature" | "bugfix" | "refactor" | "docs" | "security";
+export interface Perspective {
+  perspective: PerspectiveType;  // Not just 'string'
+}
+```
+
+**Handle optional properties:**
+- When mapping optional properties to required ones, provide defaults:
+```typescript
+changes: f.changes ?? (f.additions + f.deletions)
+```
+
+**Remove unused imports:**
+- Remove unused imports to avoid TS6133 errors
+- Use `_ctx` prefix for intentionally unused parameters
+
+**Convex component libraries:**
+- `Workpool`, `WorkflowManager`, `ActionCache` are NOT generic - don't add type parameters
+- Use `ActionCache<any>` if type annotation needed for circular inference
+
 ## Environment Variables
 
 Required for local development:

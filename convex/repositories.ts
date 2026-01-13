@@ -1,6 +1,7 @@
 import { query, mutation, internalMutation, internalQuery, action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
+import { Doc } from "./_generated/dataModel";
 import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
 
 export const getByUser = query({
@@ -186,7 +187,7 @@ export const refreshRepos = action({
     // Get all unique installation IDs for this user
     const userRepos = await ctx.runQuery(api.repositories.getAllAvailable);
     const installationIds = Array.from(
-      new Set(userRepos.map((repo) => repo.githubInstallationId))
+      new Set(userRepos.map((repo: Doc<"repositories">) => repo.githubInstallationId))
     );
 
     if (installationIds.length === 0) {

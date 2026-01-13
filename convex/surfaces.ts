@@ -137,6 +137,19 @@ export const getSurfacesByPaths = internalQuery({
   },
 });
 
+// Get all surfaces for a repository (for RAG indexing)
+export const getSurfacesByRepositoryInternal = internalQuery({
+  args: {
+    repositoryId: v.id("repositories"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("codeSurfaces")
+      .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId))
+      .collect();
+  },
+});
+
 // Get surfaces by IDs
 export const getSurfacesByIds = query({
   args: {

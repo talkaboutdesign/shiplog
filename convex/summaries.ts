@@ -412,20 +412,41 @@ export const updateSummariesForDigest = internalAction({
       if (existingSummary) {
         // Summary exists, update it incrementally
         try {
-          // Generate updated summary using AI
-          const updatedSummary = await ctx.runAction(internal.summariesAi.updateSummaryWithDigest, {
+          // Get repository to get userId
+          const repository = await ctx.runQuery(internal.repositories.getById, {
+            repositoryId: args.repositoryId,
+          });
+          
+          if (!repository) {
+            console.error("Repository not found for summary update");
+            continue;
+          }
+
+          // Get user for summary agent
+          const user = await ctx.runQuery(internal.users.getById, {
+            userId: repository.userId,
+          });
+          
+          if (!user || !user.apiKeys) {
+            console.error("User or API keys not found for summary update");
+            continue;
+          }
+
+          // Generate updated summary using agent
+          const updatedSummary = await ctx.runAction(internal.agents.summaryAgent.updateSummaryWithDigest, {
             summaryId: existingSummary._id,
             digestId: args.digestId,
+            userId: repository.userId,
           });
 
           // Update the summary in database
           await ctx.runMutation(internal.summaries.update, {
             summaryId: existingSummary._id,
-            headline: updatedSummary.headline,
-            accomplishments: updatedSummary.accomplishments,
-            keyFeatures: updatedSummary.keyFeatures,
-            workBreakdown: updatedSummary.workBreakdown,
-            metrics: updatedSummary.metrics,
+            headline: updatedSummary.summaryData.headline,
+            accomplishments: updatedSummary.summaryData.accomplishments,
+            keyFeatures: updatedSummary.summaryData.keyFeatures,
+            workBreakdown: updatedSummary.summaryData.workBreakdown,
+            metrics: updatedSummary.summaryData.totalItems ? { totalItems: updatedSummary.summaryData.totalItems } : existingSummary.metrics,
             includedDigestIds: [...existingSummary.includedDigestIds, args.digestId],
           });
         } catch (error) {
