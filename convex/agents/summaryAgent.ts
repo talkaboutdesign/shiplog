@@ -3,8 +3,6 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { components } from "../_generated/api";
-import { Agent } from "@convex-dev/agent";
 import { getUserModelConfig } from "./config";
 import { SummarySchema } from "./schemas";
 import { SUMMARY_SYSTEM_PROMPT, INCREMENTAL_UPDATE_SYSTEM_PROMPT } from "./prompts";
@@ -48,16 +46,8 @@ export const generateSummary = internalAction({
     // Get model config with user's API keys
     const { model } = getUserModelConfig(user.apiKeys);
 
-    // Create agent with streaming support
-    const agent = new Agent(components.agent, {
-      name: "Summary Agent",
-      languageModel: model,
-      instructions: SUMMARY_SYSTEM_PROMPT,
-      maxSteps: 3,
-    });
-
-    // Create thread for streaming
-    const { threadId } = await agent.createThread(ctx);
+    // Generate simple thread ID for tracking (no agent needed)
+    const threadId = `summary-${args.repositoryId}-${args.period}-${Date.now()}`;
 
     // Fetch all digests
     const digests = await Promise.all(
@@ -100,7 +90,6 @@ export const generateSummary = internalAction({
     prompt += `\nGenerate a comprehensive executive report based on these digests. Focus on business impact and key achievements.`;
 
     // Generate summary using structured output
-    // Agent component's thread supports streaming automatically
     try {
       const { generateObject } = await import("ai");
       const result = await generateObject({
@@ -189,16 +178,8 @@ export const updateSummaryWithDigest = internalAction({
     // Get model config with user's API keys
     const { model } = getUserModelConfig(user.apiKeys);
 
-    // Create agent with streaming support
-    const agent = new Agent(components.agent, {
-      name: "Summary Agent",
-      languageModel: model,
-      instructions: INCREMENTAL_UPDATE_SYSTEM_PROMPT,
-      maxSteps: 3,
-    });
-
-    // Create thread for streaming
-    const { threadId } = await agent.createThread(ctx);
+    // Generate simple thread ID for tracking (no agent needed)
+    const threadId = `summary-update-${args.summaryId}-${Date.now()}`;
 
     // Build prompt with existing summary and new digest
     const periodLabel: string = summary.period === "daily" ? "day" : summary.period === "weekly" ? "week" : "month";

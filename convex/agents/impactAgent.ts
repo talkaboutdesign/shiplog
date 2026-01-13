@@ -3,12 +3,9 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { components } from "../_generated/api";
-import { Agent } from "@convex-dev/agent";
 import { getFastModelConfig } from "./config";
 import { ImpactAnalysisSchema, ChangeIntentSchema } from "./schemas";
 import { IMPACT_ANALYSIS_SYSTEM_PROMPT } from "./prompts";
-import { createAgentTools } from "./tools";
 import { getRepositoryWithOwnership } from "../security/ownership";
 import { Doc } from "../_generated/dataModel";
 import { isTransientError, logStructuredOutputError } from "./errors";
@@ -57,23 +54,8 @@ export const analyzeImpact = internalAction({
     // Use fast model for impact analysis
     const { model } = getFastModelConfig(user.apiKeys);
 
-    // Create agent with tools
-    const workflowContext = {
-      userId: args.userId,
-      repositoryId: args.repositoryId,
-    };
-    const tools = createAgentTools(workflowContext);
-
-    const agent = new Agent(components.agent, {
-      name: "Impact Analysis Agent",
-      languageModel: model,
-      instructions: IMPACT_ANALYSIS_SYSTEM_PROMPT,
-      tools,
-      maxSteps: 5,
-    });
-
-    // Create thread for tracking
-    const { threadId } = await agent.createThread(ctx);
+    // Generate simple thread ID for tracking (no agent needed)
+    const threadId = `impact-${args.digestId}-${Date.now()}`;
 
     // Get surfaces for the files
     const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {

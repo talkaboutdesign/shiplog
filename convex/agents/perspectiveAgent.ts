@@ -3,8 +3,6 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { components } from "../_generated/api";
-import { Agent } from "@convex-dev/agent";
 import { getUserModelConfig } from "./config";
 import { PerspectiveSchema } from "./schemas";
 import { getRepositoryWithOwnership } from "../security/ownership";
@@ -54,16 +52,8 @@ export const generatePerspective = internalAction({
     // Get model config with user's API keys
     const { model } = getUserModelConfig(user.apiKeys);
 
-    // Create agent
-    const agent = new Agent(components.agent, {
-      name: "Perspective Agent",
-      languageModel: model,
-      instructions: `You are a technical writer generating perspective-specific summaries of code changes.`,
-      maxSteps: 3,
-    });
-
-    // Create thread for tracking
-    const { threadId } = await agent.createThread(ctx);
+    // Generate simple thread ID for tracking (no agent needed)
+    const threadId = `perspective-${args.digestId}-${args.perspective}-${Date.now()}`;
 
     // Build prompt based on digest summary
     const perspectivePrompt: string = `Based on this code change summary, analyze it from a ${args.perspective} perspective:

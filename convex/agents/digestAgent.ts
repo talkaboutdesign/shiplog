@@ -3,17 +3,12 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { components } from "../_generated/api";
-import { Agent } from "@convex-dev/agent";
-import { getUserModelConfig } from "./config";
-import { DigestSchema } from "./schemas";
-import { DIGEST_SYSTEM_PROMPT } from "./prompts";
 import { z } from "zod";
-import { createAgentTools } from "./tools";
 import { getRepositoryWithOwnership } from "../security/ownership";
-import { isTransientError, generateFallbackDigest, logStructuredOutputError } from "./errors";
+import { generateFallbackDigest } from "./errors";
 import { getGitHubAppConfig, getFileDiffForPush, getFileDiffForPR } from "../github";
 import { createHash } from "crypto";
+import { DigestSchema } from "./schemas";
 
 /**
  * Create hash of event for cache key
@@ -34,7 +29,7 @@ function createEventHash(event: any): string {
 }
 
 /**
- * Generate digest for an event using Agent component
+ * Generate digest for an event (uses cache for generation)
  * SECURITY: Verifies repository ownership, uses user's API keys
  */
 export const generateDigest = internalAction({
@@ -70,26 +65,8 @@ export const generateDigest = internalAction({
       throw new Error("Event not found");
     }
 
-    // Get model config with user's API keys
-    const { model } = getUserModelConfig(user.apiKeys);
-
-    // Create agent with tools for tracking (thread ID only, agent not used for generation)
-    const workflowContext = {
-      userId: args.userId,
-      repositoryId: args.repositoryId,
-    };
-    const tools = createAgentTools(workflowContext);
-
-    const agent = new Agent(components.agent, {
-      name: "Digest Agent",
-      languageModel: model,
-      instructions: DIGEST_SYSTEM_PROMPT,
-      tools,
-      maxSteps: 5,
-    });
-
-    // Create thread for tracking (agent not used for generation, we use generateObject directly)
-    const { threadId } = await agent.createThread(ctx);
+    // Generate simple thread ID for tracking (no agent needed)
+    const threadId = `digest-${args.eventId}-${Date.now()}`;
 
     // Get file diffs if available
     let fileDiffs = event.fileDiffs;
@@ -131,17 +108,12 @@ export const generateDigest = internalAction({
       }
     }
 
-    // Build prompt from event (before cache check)
-    const prompt = buildEventPrompt(event, fileDiffs);
-
     // Check cache first (key includes repositoryId for security)
+    // Cache handles all generation via computeDigest - no duplicate logic here
     const eventHash = createEventHash(event);
-    
-    // Try to get from cache
-    // Note: ActionCache automatically includes repositoryId in cache key via args
     const { digestCache } = await import("../cache/digestCache");
-    let digestData: z.infer<typeof DigestSchema> | null = null;
     
+    let digestData: z.infer<typeof DigestSchema> | null = null;
     try {
       const cached = await digestCache.fetch(ctx, {
         eventId: args.eventId,
@@ -152,49 +124,12 @@ export const generateDigest = internalAction({
       // Cache returns the digest data directly
       digestData = cached?.digestData || null;
     } catch (error) {
-      // Cache miss or error - generate fresh
-      console.log("Cache miss or error, generating fresh digest:", error);
+      // Cache error - use fallback
+      console.error("Cache error, using fallback digest:", error);
+      digestData = generateFallbackDigest(event);
     }
     
-    // Generate digest if not cached
-    if (!digestData) {
-      try {
-        const { generateObject } = await import("ai");
-        const result = await generateObject({
-          model,
-          schema: DigestSchema,
-          system: DIGEST_SYSTEM_PROMPT,
-          prompt,
-        });
-        
-        digestData = result.object;
-      } catch (error) {
-        // Handle errors gracefully - single retry for transient errors only
-        if (isTransientError(error)) {
-          try {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            const { generateObject } = await import("ai");
-            const result = await generateObject({
-              model,
-              schema: DigestSchema,
-              system: DIGEST_SYSTEM_PROMPT,
-              prompt,
-            });
-            digestData = result.object;
-          } catch (retryError) {
-            logStructuredOutputError(retryError, { eventId: args.eventId, provider: user.apiKeys.preferredProvider });
-            // Fallback to template-based digest
-            digestData = generateFallbackDigest(event);
-          }
-        } else {
-          logStructuredOutputError(error, { eventId: args.eventId, provider: user.apiKeys.preferredProvider });
-          // Fallback to template-based digest
-          digestData = generateFallbackDigest(event);
-        }
-      }
-    }
-    
-    // Return digest data (cached, generated, or fallback)
+    // Return digest data (from cache or fallback)
     return {
       digestData: digestData!,
       threadId,
