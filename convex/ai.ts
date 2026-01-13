@@ -51,9 +51,9 @@ const ImpactAnalysisSchema = z.object({
   confidence: z.number().min(0).max(100),
   overallExplanation: z.string().describe("2-3 sentence senior engineer summary in markdown. Use **bold** for critical issues, `code` for function names. Focus on NEW risks, acknowledge improvements."),
   intentValidation: z.object({
-    claimsVerified: z.boolean().describe("Whether the commit achieves what it claims"),
-    explanation: z.string().describe("Brief explanation of whether intent was achieved"),
-  }).optional(),
+    claimsVerified: z.boolean().describe("Whether the commit achieves what it claims. Set to true if no commit context provided."),
+    explanation: z.string().describe("Brief explanation of whether intent was achieved. Use 'No commit context provided' if unavailable."),
+  }),
 });
 
 const IMPACT_ANALYSIS_SYSTEM_PROMPT = `You are a senior engineer performing DIFFERENTIAL code review. Your job is to identify NEW risks introduced by changes, not flag existing patterns or improvements.
@@ -1079,7 +1079,7 @@ Provide overall risk level and 2-3 sentence summary focusing on differential ana
       filesAnalyzed: args.fileDiffs.length,
       surfacesAffected: affectedSurfaces.length,
       overallRisk: impactResult.overallRisk,
-      intentValidated: impactResult.intentValidation?.claimsVerified ?? null,
+      intentValidated: impactResult.intentValidation.claimsVerified,
       hadIntentContext: !!changeIntent,
     });
   },
