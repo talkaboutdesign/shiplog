@@ -174,9 +174,13 @@ function getModel(provider: "openai" | "anthropic" | "openrouter", apiKey: strin
 
 /**
  * Get the fastest model for the given provider - used for impact analysis
- * Always selects the fastest available model regardless of user's preferred model
+ * For OpenRouter, uses the user's configured model to ensure compatibility
  */
-function getFastModel(provider: "openai" | "anthropic" | "openrouter", apiKey: string) {
+function getFastModel(
+  provider: "openai" | "anthropic" | "openrouter",
+  apiKey: string,
+  userOpenRouterModel?: string
+) {
   if (provider === "openai") {
     const openai = createOpenAI({ apiKey });
     return openai("gpt-4o-mini");
@@ -184,12 +188,25 @@ function getFastModel(provider: "openai" | "anthropic" | "openrouter", apiKey: s
     const anthropic = createAnthropic({ apiKey });
     return anthropic("claude-3-5-haiku-latest");
   } else {
-    // OpenRouter - always use gpt-4o-mini for speed
+    // OpenRouter - use user's model if set, otherwise default to gpt-4o-mini
+    const model = userOpenRouterModel || "openai/gpt-4o-mini";
+
+    // For Anthropic models through OpenRouter, use Anthropic SDK
+    // (same logic as getModel for proper structured output support)
+    if (model.startsWith("anthropic/")) {
+      const anthropic = createAnthropic({
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      });
+      return anthropic(model);
+    }
+
+    // For OpenAI and other models, use OpenAI SDK
     const openrouter = createOpenAI({
       apiKey,
       baseURL: "https://openrouter.ai/api/v1",
     });
-    return openrouter("openai/gpt-4o-mini");
+    return openrouter(model);
   }
 }
 
@@ -898,7 +915,10 @@ export const analyzeImpactAsync = internalAction({
     }
 
     // Use fast model for impact analysis
-    const fastModel = getFastModel(preferredProvider, apiKey);
+    // Pass user's OpenRouter model for compatibility (especially for Anthropic models)
+    const userOpenRouterModel = user.apiKeys.openrouterModel;
+    console.log(`Impact analysis using provider: ${preferredProvider}, model: ${userOpenRouterModel || "default"}`);
+    const fastModel = getFastModel(preferredProvider, apiKey, userOpenRouterModel);
 
     // Pass 1: Analyze intent from commit context (if available)
     let changeIntent: z.infer<typeof ChangeIntentSchema> | null = null;
@@ -1006,8 +1026,13 @@ Provide overall risk level and 2-3 sentence summary focusing on differential ana
         impactResult = impact;
         break;
       } catch (error: any) {
+        // Log detailed error info for debugging
         console.error(`Impact analysis attempt ${attempt + 1} failed:`, {
-          error: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? error.message : String(error),
+          name: error?.name,
+          statusCode: error?.statusCode,
+          responseBody: error?.responseBody?.substring?.(0, 500),
+          cause: error?.cause?.message,
           attempt,
         });
 
