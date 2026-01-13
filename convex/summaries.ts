@@ -453,8 +453,19 @@ export const updateSummariesForDigest = internalAction({
           console.error(`Error updating ${period} summary:`, error);
           // Continue with other periods even if one fails
         }
+      } else {
+        // Summary doesn't exist, generate it automatically
+        try {
+          await ctx.runAction(internal.summaries.generateSummaryOnDemand, {
+            repositoryId: args.repositoryId,
+            period,
+            periodStart,
+          });
+        } catch (error) {
+          console.error(`Error generating ${period} summary:`, error);
+          // Continue with other periods even if one fails
+        }
       }
-      // If summary doesn't exist, skip (will be generated on-demand when first accessed)
     }
   },
 });
