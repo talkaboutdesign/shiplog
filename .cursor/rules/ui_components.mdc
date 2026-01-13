@@ -1,0 +1,80 @@
+---
+description: UI component and icon guidelines - use only shadcn/ui components and Lucide icons
+globs: **/*.tsx,**/*.ts,**/*.jsx,**/*.js
+---
+
+# UI Components and Icons Guidelines
+
+## Component Library
+- **ALWAYS use shadcn/ui components** for all UI components
+- Components are located in `src/components/ui/`
+- Import components from `@/components/ui/[component-name]`
+- Do NOT use other UI libraries (Material-UI, Ant Design, Chakra UI, etc.)
+- Do NOT create custom component implementations when a shadcn/ui equivalent exists
+
+## Icons
+- **ALWAYS use icons from Lucide React library** (`lucide-react`)
+- Import icons like: `import { IconName } from "lucide-react"`
+- Do NOT use:
+  - Unicode arrow characters (▲, ▼, →, ←, etc.)
+  - Custom SVG icons
+  - Other icon libraries (react-icons, @heroicons, etc.)
+  - Inline SVG elements for icons
+- Common icon patterns:
+  - Arrows/Chevrons: `ChevronDown`, `ChevronUp`, `ChevronLeft`, `ChevronRight`, `ArrowRight`, `ArrowLeft`, `ArrowUp`, `ArrowDown`
+  - Actions: `Check`, `X`, `Pencil`, `Trash`, `Edit`, `Save`, `Search`, `RefreshCw`, `Loader2`
+  - Navigation: `Menu`, `Home`, `Settings`, `User`
+  - Status: `Clock`, `AlertCircle`, `CheckCircle`, `XCircle`
+  - Files: `Folder`, `FolderGit`, `File`, `FileText`
+
+## Examples
+
+### Correct Icon Usage
+```tsx
+import { ChevronDown, Search, X } from "lucide-react";
+
+// Collapsible section
+<Button onClick={() => setIsOpen(!isOpen)}>
+  {title}
+  {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+</Button>
+
+// Search input
+<div className="relative">
+  <Search className="absolute left-3 top-1/2 h-4 w-4" />
+  <Input className="pl-9" />
+</div>
+
+// Close button
+<Button variant="ghost" size="icon">
+  <X className="h-4 w-4" />
+</Button>
+```
+
+### Incorrect Icon Usage (DO NOT USE)
+```tsx
+// ❌ Unicode characters
+<span>{isOpen ? '▲' : '▼'}</span>
+<span>View on GitHub →</span>
+
+// ❌ Custom SVG
+<svg xmlns="..." width="16" height="16">
+  <path d="..." />
+</svg>
+
+// ❌ Other icon libraries
+import { FaSearch } from "react-icons/fa";
+import { ChevronDownIcon } from "@heroicons/react/24/outline";
+```
+
+## Component Structure
+- Use shadcn/ui components as base building blocks
+- Extend functionality by composing shadcn/ui components
+- Maintain consistent styling using Tailwind CSS classes
+- Follow shadcn/ui patterns for variants, sizes, and states
+
+## When Adding New Components
+1. Check if shadcn/ui has the component you need
+2. If not available, check if you can compose existing shadcn/ui components
+3. Only create custom components when absolutely necessary
+4. Always use Lucide icons for any iconography in custom components
