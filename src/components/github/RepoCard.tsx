@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ArrowRight } from "lucide-react";
 import type { Repository } from "../../../convex/types";
 
 interface RepoCardProps {
@@ -35,9 +36,9 @@ export function RepoCard({ repository }: RepoCardProps) {
               href={`https://github.com/${repository.fullName}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary hover:underline"
+              className="text-primary hover:underline flex items-center gap-1"
             >
-              View on GitHub →
+              View on GitHub <ArrowRight className="h-3 w-3" />
             </a>
           </div>
         </div>

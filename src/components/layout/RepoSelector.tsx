@@ -4,6 +4,7 @@ import { SyncedReposEditor } from "@/components/github/SyncedReposEditor";
 import { useSelectedRepo } from "@/hooks/useSelectedRepo";
 import { cn } from "@/lib/utils";
 import { Id } from "../../../convex/_generated/dataModel";
+import { FolderGit, ChevronDown, Check, Pencil } from "lucide-react";
 
 export function RepoSelector() {
   const { repos, selectedRepo, setSelectedRepoId, isLoading } = useSelectedRepo();
@@ -28,7 +29,7 @@ export function RepoSelector() {
   if (isLoading) {
     return (
       <Button variant="outline" disabled className="gap-2">
-        <RepoIcon />
+        <FolderGit className="h-4 w-4" />
         Loading...
       </Button>
     );
@@ -56,11 +57,11 @@ export function RepoSelector() {
         className="gap-2"
         onClick={() => setShowDropdown(!showDropdown)}
       >
-        <RepoIcon />
+        <FolderGit className="h-4 w-4" />
         <span className="max-w-[150px] truncate">
           {selectedRepo?.fullName || "Select repo"}
         </span>
-        <ChevronIcon className={cn("transition-transform", showDropdown && "rotate-180")} />
+        <ChevronDown className={cn("h-4 w-4 transition-transform", showDropdown && "rotate-180")} />
       </Button>
 
       {/* Dropdown Menu */}
@@ -79,7 +80,7 @@ export function RepoSelector() {
                 )}
               >
                 {selectedRepo?._id === repo._id && (
-                  <CheckIcon className="h-4 w-4" />
+                  <Check className="h-4 w-4" />
                 )}
                 <span className={cn(selectedRepo?._id !== repo._id && "pl-6")}>
                   {repo.fullName}
@@ -96,7 +97,7 @@ export function RepoSelector() {
             onClick={handleEditClick}
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
           >
-            <EditIcon className="h-4 w-4" />
+            <Pencil className="h-4 w-4" />
             <span>Edit synced repos</span>
           </button>
         </div>
@@ -105,84 +106,5 @@ export function RepoSelector() {
       {/* SyncedReposEditor - controlled */}
       <SyncedReposEditor open={editorOpen} onOpenChange={setEditorOpen} />
     </div>
-  );
-}
-
-function RepoIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-    >
-      <rect width="18" height="18" x="3" y="3" rx="2" />
-      <path d="M3 9h18" />
-      <path d="M9 21V9" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn("h-4 w-4", className)}
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn("h-4 w-4", className)}
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function EditIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn("h-4 w-4", className)}
-    >
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
   );
 }

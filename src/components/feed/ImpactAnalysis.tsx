@@ -5,6 +5,7 @@ import { SurfaceImpactBadge } from "./SurfaceImpactBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import type { Digest } from "../../../convex/types";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -81,7 +82,11 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
               onClick={() => setShowFiles(!showFiles)}
             >
               {event.fileDiffs.length} file{event.fileDiffs.length !== 1 ? 's' : ''} changed
-              <span className="ml-1">{showFiles ? '▲' : '▼'}</span>
+              {showFiles ? (
+                <ChevronUp className="ml-1 h-3 w-3" />
+              ) : (
+                <ChevronDown className="ml-1 h-3 w-3" />
+              )}
             </Button>
             {showFiles && (
               <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">
@@ -155,9 +160,11 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
                   ({impactAnalysis.affectedSurfaces.length})
                 </span>
               </div>
-              <span className="text-muted-foreground ml-2">
-                {isExpanded ? "▲" : "▼"}
-              </span>
+              {isExpanded ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground ml-2" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground ml-2" />
+              )}
             </Button>
             {isExpanded && (
               <div className="space-y-2">
@@ -201,7 +208,11 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
             onClick={() => setShowFiles(!showFiles)}
           >
             {event.fileDiffs.length} file{event.fileDiffs.length !== 1 ? 's' : ''} changed
-            <span className="ml-1">{showFiles ? '▲' : '▼'}</span>
+            {showFiles ? (
+              <ChevronUp className="ml-1 h-3 w-3" />
+            ) : (
+              <ChevronDown className="ml-1 h-3 w-3" />
+            )}
           </Button>
           {showFiles && (
             <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">

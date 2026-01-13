@@ -11,6 +11,7 @@ import { useEvent } from "@/hooks/useEvent";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { formatDistanceToNow } from "date-fns";
+import { ArrowRight, Clock } from "lucide-react";
 import type { Digest, Event } from "../../../convex/types";
 
 interface DigestCardProps {
@@ -58,20 +59,7 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
           <div className="flex-1 space-y-2">
             {/* Timestamp above headline */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="opacity-70"
-              >
-                <circle cx="6" cy="6" r="4.5" />
-                <path d="M6 3v3l2.5 1.5" />
-              </svg>
+              <Clock className="h-3 w-3 opacity-70" />
               <span>{formatDistanceToNow(new Date(digest.createdAt), { addSuffix: true })}</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -203,9 +191,9 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
                   href={githubUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-primary hover:underline flex items-center gap-1"
                 >
-                  View on GitHub →
+                  View on GitHub <ArrowRight className="h-3 w-3" />
                 </a>
               </>
             )}
