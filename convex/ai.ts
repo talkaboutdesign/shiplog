@@ -774,32 +774,31 @@ Generate a ${perspective}-focused perspective on this change. Provide a title, s
 });
 
 /**
- * Pass 1: Analyze change intent from commit message and PR context
- * This runs first to understand what the change is trying to accomplish
+ * Helper function for Pass 1: Analyze change intent from commit message and PR context
+ * Uses the provided model (user's configured API key) instead of hardcoded env var
  */
-export const analyzeChangeIntent = internalAction({
-  args: {
-    commitMessage: v.string(),
-    prTitle: v.optional(v.string()),
-    prBody: v.optional(v.string()),
-    fileCount: v.number(),
-  },
-  handler: async (_ctx, args): Promise<z.infer<typeof ChangeIntentSchema> | null> => {
-    // For very simple changes, skip intent analysis
-    if (args.fileCount <= 2 && args.commitMessage.length < 50) {
-      return null;
-    }
+async function analyzeChangeIntentWithModel(
+  model: ReturnType<typeof getFastModel>,
+  commitMessage: string,
+  prTitle?: string,
+  prBody?: string,
+  fileCount?: number
+): Promise<z.infer<typeof ChangeIntentSchema> | null> {
+  // For very simple changes, skip intent analysis
+  if (fileCount && fileCount <= 2 && commitMessage.length < 50) {
+    return null;
+  }
 
-    // Build context from available metadata
-    const contextParts = [`Commit message: "${args.commitMessage}"`];
-    if (args.prTitle) {
-      contextParts.push(`PR title: "${args.prTitle}"`);
-    }
-    if (args.prBody && args.prBody.length < 2000) {
-      contextParts.push(`PR description: "${args.prBody}"`);
-    }
+  // Build context from available metadata
+  const contextParts = [`Commit message: "${commitMessage}"`];
+  if (prTitle) {
+    contextParts.push(`PR title: "${prTitle}"`);
+  }
+  if (prBody && prBody.length < 2000) {
+    contextParts.push(`PR description: "${prBody}"`);
+  }
 
-    const intentPrompt = `Analyze this commit/PR to understand the developer's intent:
+  const intentPrompt = `Analyze this commit/PR to understand the developer's intent:
 
 ${contextParts.join("\n")}
 
@@ -809,24 +808,19 @@ Extract:
 3. Expected behavior changes
 4. Areas that could be affected`;
 
-    try {
-      // Use a simple model for intent detection - it's a lightweight task
-      const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
-      const model = openai("gpt-4o-mini");
+  try {
+    const { object: intent } = await generateObject({
+      model,
+      schema: ChangeIntentSchema,
+      prompt: intentPrompt,
+    });
 
-      const { object: intent } = await generateObject({
-        model,
-        schema: ChangeIntentSchema,
-        prompt: intentPrompt,
-      });
-
-      return intent;
-    } catch (error) {
-      console.error("Intent analysis failed:", error);
-      return null;
-    }
-  },
-});
+    return intent;
+  } catch (error) {
+    console.error("Intent analysis failed:", error);
+    return null;
+  }
+}
 
 /**
  * Pass 2: Analyze impact asynchronously - runs in background after digest is created
@@ -890,16 +884,13 @@ export const analyzeImpactAsync = internalAction({
     // Pass 1: Analyze intent from commit context (if available)
     let changeIntent: z.infer<typeof ChangeIntentSchema> | null = null;
     if (args.commitMessage) {
-      try {
-        changeIntent = await ctx.runAction(internal.ai.analyzeChangeIntent, {
-          commitMessage: args.commitMessage,
-          prTitle: args.prTitle,
-          prBody: args.prBody,
-          fileCount: args.fileDiffs.length,
-        });
-      } catch (error) {
-        console.error("Intent analysis failed, continuing without intent context:", error);
-      }
+      changeIntent = await analyzeChangeIntentWithModel(
+        fastModel,
+        args.commitMessage,
+        args.prTitle,
+        args.prBody,
+        args.fileDiffs.length
+      );
     }
 
     // Get surfaces for the files
