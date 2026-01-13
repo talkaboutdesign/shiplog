@@ -1,6 +1,7 @@
 import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
 
 // Check if repository needs indexing and trigger if needed
 export const checkAndIndexIfNeeded = internalAction({
@@ -39,6 +40,11 @@ export const checkAndIndexIfNeeded = internalAction({
 export const getRepositoryIndexStatus = query({
   args: { repositoryId: v.id("repositories") },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Verify repository ownership before returning index status
+    await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
+    
     const repository = await ctx.db.get(args.repositoryId);
     if (!repository) {
       return null;
@@ -76,6 +82,11 @@ export const getSurfacesByRepository = query({
     ),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Verify repository ownership before returning surfaces
+    await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
+    
     let query = ctx.db
       .query("codeSurfaces")
       .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId));
@@ -122,10 +133,27 @@ export const getSurfacesByIds = query({
     surfaceIds: v.array(v.id("codeSurfaces")),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    
+    // Get all surfaces
     const surfaces = await Promise.all(
       args.surfaceIds.map((id) => ctx.db.get(id))
     );
-    return surfaces.filter((s): s is NonNullable<typeof s> => s !== null);
+    const validSurfaces = surfaces.filter((s): s is NonNullable<typeof s> => s !== null);
+    
+    if (validSurfaces.length === 0) {
+      return [];
+    }
+    
+    // Get all unique repository IDs from the surfaces
+    const repositoryIds = Array.from(new Set(validSurfaces.map(s => s.repositoryId)));
+    
+    // Verify that all repositories belong to the user
+    for (const repositoryId of repositoryIds) {
+      await verifyRepositoryOwnership(ctx, repositoryId, user._id);
+    }
+    
+    return validSurfaces;
   },
 });
 

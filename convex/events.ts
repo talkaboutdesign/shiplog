@@ -157,30 +157,32 @@ export const listByRepositories = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     
+    // Get all repositories owned by the user in a single query (optimize N+1)
+    const userRepositories = await ctx.db
+      .query("repositories")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    const userRepoIdSet = new Set(userRepositories.map(r => r._id));
+    
     // Filter repositoryIds to only include those owned by the user
-    const ownedRepositoryIds: Id<"repositories">[] = [];
-    for (const repoId of args.repositoryIds) {
-      try {
-        await verifyRepositoryOwnership(ctx, repoId, user._id);
-        ownedRepositoryIds.push(repoId);
-      } catch {
-        // Skip repositories the user doesn't own
-        continue;
-      }
-    }
+    const ownedRepositoryIds = args.repositoryIds.filter(repoId => userRepoIdSet.has(repoId));
     
     if (ownedRepositoryIds.length === 0) {
       return [];
     }
     
     const limit = args.limit || 50;
+    // Query with limit per repository to avoid over-fetching
+    // We fetch limit items per repo, then merge and take final limit
+    const perRepoLimit = Math.ceil(limit / ownedRepositoryIds.length) + 5; // Add buffer for better results
     const allEvents = await Promise.all(
       ownedRepositoryIds.map((repoId) =>
         ctx.db
           .query("events")
           .withIndex("by_repository_time", (q) => q.eq("repositoryId", repoId))
           .order("desc")
-          .collect()
+          .take(perRepoLimit)
       )
     );
     const flattened = allEvents.flat();

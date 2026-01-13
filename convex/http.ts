@@ -187,6 +187,12 @@ http.route({
         return new Response("Repository not found", { status: 404 });
       }
 
+      // Verify repository is active (security: only process events for active repositories)
+      if (!repository.isActive) {
+        console.log(`Repository ${repository._id} is not active, skipping webhook event`);
+        return new Response("Repository not active", { status: 200 }); // Return 200 to prevent GitHub retries
+      }
+
       // Extract actor info
       let actorGithubUsername = "";
       let actorGithubId = 0;
