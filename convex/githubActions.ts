@@ -55,13 +55,8 @@ export const refreshInstallationRepos = internalAction({
       installationId: args.installationId,
     });
 
-    const existingRepoMap = new Map(
-      existingRepos.map((repo) => [repo.githubId, repo])
-    );
-
     // Update or create all repos from GitHub
     for (const repo of repos) {
-      const existing = existingRepoMap.get(repo.id);
       await ctx.runMutation(internal.repositories.createOrUpdateRepository, {
         userId: args.userId,
         installationId: args.installationId,

@@ -11,6 +11,7 @@ import { EmptyFeed } from "@/components/feed/EmptyFeed";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -22,7 +23,6 @@ export function Dashboard() {
   const [filters, setFilters] = useState<FeedFiltersType>({
     eventType: "all",
     timeRange: "all",
-    repositoryId: "all",
   });
 
   // Get digests and events from all active repos
@@ -122,14 +122,9 @@ export function Dashboard() {
                   filters={filters}
                   onFiltersChange={setFilters}
                   contributors={contributors}
-                  repositories={activeRepos}
                 />
-                <MultiRepoActivityFeed 
-                  repositoryIds={
-                    filters.repositoryId && filters.repositoryId !== "all"
-                      ? [filters.repositoryId]
-                      : repositoryIds
-                  }
+                <MultiRepoActivityFeed
+                  repositoryIds={repositoryIds}
                   filters={filters}
                 />
               </>
@@ -141,11 +136,11 @@ export function Dashboard() {
   );
 }
 
-function MultiRepoActivityFeed({ 
-  repositoryIds, 
-  filters 
-}: { 
-  repositoryIds: string[];
+function MultiRepoActivityFeed({
+  repositoryIds,
+  filters
+}: {
+  repositoryIds: Id<"repositories">[];
   filters: FeedFiltersType;
 }) {
   const digests = useQuery(
@@ -170,32 +165,6 @@ function MultiRepoActivityFeed({
     filters.timeRange === "24h" ? now - 24 * 60 * 60 * 1000 :
     filters.timeRange === "7d" ? now - 7 * 24 * 60 * 60 * 1000 :
     null;
-
-  // Filter events
-  const filteredEvents = events.filter((event) => {
-    // Filter by event type
-    if (filters.eventType !== "all") {
-      if (event.type !== filters.eventType) {
-        return false;
-      }
-    }
-
-    // Filter by time range
-    if (timeRangeThreshold !== null) {
-      if (event.occurredAt < timeRangeThreshold) {
-        return false;
-      }
-    }
-
-    // Filter by contributor
-    if (filters.contributor) {
-      if (event.actorGithubUsername !== filters.contributor) {
-        return false;
-      }
-    }
-
-    return true;
-  });
 
   // Filter digests
   const filteredDigests = digests.filter((digest) => {

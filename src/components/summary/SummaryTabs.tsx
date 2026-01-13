@@ -1,5 +1,7 @@
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { PeriodType } from "@/lib/periodUtils";
+
+export type { PeriodType };
 
 interface SummaryTabsProps {
   value: PeriodType;

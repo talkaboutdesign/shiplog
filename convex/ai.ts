@@ -3,7 +3,6 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { Id } from "./_generated/dataModel";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -219,7 +218,7 @@ export const digestEvent = internalAction({
       }
 
       // Fetch user and check index in parallel since they're independent
-      const [user, indexCheck] = await Promise.all([
+      const [user, _indexCheck] = await Promise.all([
         ctx.runQuery(internal.users.getById, {
           userId: repository.userId,
         }),

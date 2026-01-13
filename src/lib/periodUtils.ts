@@ -16,9 +16,6 @@ export function getUserTimezone(): string {
  * Get timestamp for midnight in a specific timezone for a given date
  */
 function getMidnightInTimezone(year: number, month: number, day: number, timezone: string): number {
-  // Create a date string for the date we want
-  const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  
   // Use Intl to format a test UTC time and see what it shows in the timezone
   // We'll find the UTC time where the timezone shows midnight
   let candidate = Date.UTC(year, month, day, 12, 0, 0); // Start with noon UTC

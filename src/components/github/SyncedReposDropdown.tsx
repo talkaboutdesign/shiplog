@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { SyncedReposEditor } from "./SyncedReposEditor";
 import { FolderGit, ChevronDown, Pencil } from "lucide-react";
-import type { Repository } from "../../../convex/types";
 
 export function SyncedReposDropdown() {
   const activeRepos = useQuery(api.repositories.getAllActive);
