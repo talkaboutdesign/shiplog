@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkBreakdown } from "./WorkBreakdown";
 import { formatPeriodRange, type PeriodType } from "@/lib/periodUtils";
 import { TimeAgo } from "@/components/common/TimeAgo";
+import { StreamingText } from "@/components/common/StreamingText";
 import ReactMarkdown from "react-markdown";
 import { Clock } from "lucide-react";
 
@@ -73,7 +74,11 @@ export function SummaryView({ summary, isStreaming = false }: SummaryViewProps) 
         <CardContent className="pt-6">
           <div className="space-y-3">
             <h2 className="text-2xl font-bold leading-tight">
-              {summary.headline || (isStreaming ? "..." : "")}
+              {summary.headline ? (
+                <StreamingText text={summary.headline} isStreaming={isStreaming} />
+              ) : isStreaming ? (
+                "..."
+              ) : null}
             </h2>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               {summary.lastUpdatedAt && (
