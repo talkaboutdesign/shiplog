@@ -35,7 +35,7 @@ export function EventCard({ event }: EventCardProps) {
   const eventTypeLabel = eventTypeLabels[event.type] || event.type;
 
   // Extract info from payload
-  const payload = event.payload as any;
+  const payload = event.payload;
   let title = `${eventTypeLabel} event`;
   let description: string | undefined;
 

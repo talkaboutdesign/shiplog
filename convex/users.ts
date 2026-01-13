@@ -17,6 +17,7 @@ export const get = query({
 });
 
 export const getCurrent = query({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -33,11 +34,12 @@ export const getCurrent = query({
 export const getById = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.userId);
+    return await ctx.db.get("users", args.userId);
   },
 });
 
 export const upsert = mutation({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -60,7 +62,7 @@ export const upsert = mutation({
     };
 
     if (existingUser) {
-      await ctx.db.patch(existingUser._id, {
+      await ctx.db.patch("users", existingUser._id, {
         email: userData.email,
         githubUsername: userData.githubUsername,
         avatarUrl: userData.avatarUrl,
@@ -108,7 +110,7 @@ export const updateApiKeys = mutation({
         : existingKeys.preferredProvider,
     };
 
-    await ctx.db.patch(user._id, {
+    await ctx.db.patch("users", user._id, {
       apiKeys: updatedKeys,
       updatedAt: Date.now(),
     });

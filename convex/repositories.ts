@@ -4,6 +4,7 @@ import { api, internal } from "./_generated/api";
 import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
 
 export const getByUser = query({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -28,6 +29,7 @@ export const getByUser = query({
 });
 
 export const getActive = query({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -52,6 +54,7 @@ export const getActive = query({
 });
 
 export const getAllActive = query({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -76,6 +79,7 @@ export const getAllActive = query({
 });
 
 export const getAllAvailable = query({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -131,12 +135,12 @@ export const toggleSyncStatus = mutation({
       throw new Error("User not found");
     }
 
-    const repo = await ctx.db.get(args.repositoryId);
+    const repo = await ctx.db.get("repositories", args.repositoryId);
     if (!repo || repo.userId !== user._id) {
       throw new Error("Repository not found or unauthorized");
     }
 
-    await ctx.db.patch(args.repositoryId, {
+    await ctx.db.patch("repositories", args.repositoryId, {
       isActive: args.isActive,
       updatedAt: Date.now(),
     });
@@ -167,6 +171,7 @@ export const syncInstallationFromCallback = action({
 });
 
 export const refreshRepos = action({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -283,7 +288,7 @@ export const updateRepositoryStatus = internalMutation({
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.repositoryId, {
+    await ctx.db.patch("repositories", args.repositoryId, {
       isActive: args.isActive,
       updatedAt: Date.now(),
     });
@@ -293,7 +298,7 @@ export const updateRepositoryStatus = internalMutation({
 export const getById = internalQuery({
   args: { repositoryId: v.id("repositories") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.repositoryId);
+    return await ctx.db.get("repositories", args.repositoryId);
   },
 });
 
@@ -302,7 +307,7 @@ export const getByIdPublic = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
-    const repo = await ctx.db.get(args.repositoryId);
+    const repo = await ctx.db.get("repositories", args.repositoryId);
     return repo ? { fullName: repo.fullName } : null;
   },
 });
@@ -341,7 +346,7 @@ export const updateIndexStatus = internalMutation({
       update.indexError = args.indexError;
     }
 
-    await ctx.db.patch(args.repositoryId, update);
+    await ctx.db.patch("repositories", args.repositoryId, update);
   },
 });
 
@@ -364,7 +369,7 @@ export const triggerIndexing = mutation({
       throw new Error("User not found");
     }
 
-    const repo = await ctx.db.get(args.repositoryId);
+    const repo = await ctx.db.get("repositories", args.repositoryId);
     if (!repo || repo.userId !== user._id) {
       throw new Error("Repository not found or unauthorized");
     }
@@ -419,7 +424,7 @@ export const createOrUpdateRepository = internalMutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("repositories", existing._id, {
         ...repoData,
         createdAt: existing.createdAt, // Preserve original creation time
       });

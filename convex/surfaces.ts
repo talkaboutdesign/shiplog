@@ -45,7 +45,7 @@ export const getRepositoryIndexStatus = query({
     // Verify repository ownership before returning index status
     await verifyRepositoryOwnership(ctx, args.repositoryId, user._id);
     
-    const repository = await ctx.db.get(args.repositoryId);
+    const repository = await ctx.db.get("repositories", args.repositoryId);
     if (!repository) {
       return null;
     }
@@ -147,7 +147,7 @@ export const getSurfacesByIds = query({
     
     // Get all surfaces
     const surfaces = await Promise.all(
-      args.surfaceIds.map((id) => ctx.db.get(id))
+      args.surfaceIds.map((id) => ctx.db.get("codeSurfaces", id))
     );
     const validSurfaces = surfaces.filter((s): s is NonNullable<typeof s> => s !== null);
     
@@ -254,7 +254,7 @@ export const clearRepositorySurfaces = internalMutation({
       .collect();
 
     for (const surface of surfaces) {
-      await ctx.db.delete(surface._id);
+      await ctx.db.delete("codeSurfaces", surface._id);
     }
 
     return { deleted: surfaces.length };
@@ -267,12 +267,12 @@ export const updateSurfaceLastSeen = internalMutation({
     surfaceId: v.id("codeSurfaces"),
   },
   handler: async (ctx, args) => {
-    const surface = await ctx.db.get(args.surfaceId);
+    const surface = await ctx.db.get("codeSurfaces", args.surfaceId);
     if (!surface) {
       return;
     }
 
-    await ctx.db.patch(args.surfaceId, {
+    await ctx.db.patch("codeSurfaces", args.surfaceId, {
       lastSeenAt: Date.now(),
     });
   },

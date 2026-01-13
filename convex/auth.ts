@@ -32,7 +32,7 @@ export async function verifyRepositoryOwnership(
   repositoryId: Id<"repositories">,
   userId: Id<"users">
 ): Promise<Doc<"repositories">> {
-  const repo = await ctx.db.get(repositoryId);
+  const repo = await ctx.db.get("repositories", repositoryId);
   if (!repo || repo.userId !== userId) {
     throw new Error("Repository not found or unauthorized");
   }

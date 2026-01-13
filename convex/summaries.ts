@@ -167,7 +167,7 @@ export const update = internalMutation({
     if (args.metrics !== undefined) updateData.metrics = args.metrics;
     if (args.includedDigestIds !== undefined) updateData.includedDigestIds = args.includedDigestIds;
 
-    await ctx.db.patch(args.summaryId, updateData);
+    await ctx.db.patch("summaries", args.summaryId, updateData);
   },
 });
 
@@ -238,7 +238,7 @@ export const updateStreaming = internalMutation({
     if (updates.workBreakdown !== undefined) filteredUpdates.workBreakdown = updates.workBreakdown;
     if (updates.metrics !== undefined) filteredUpdates.metrics = updates.metrics;
 
-    await ctx.db.patch(summaryId, filteredUpdates);
+    await ctx.db.patch("summaries", summaryId, filteredUpdates);
   },
 });
 
@@ -250,7 +250,7 @@ export const finishStreaming = internalMutation({
     summaryId: v.id("summaries"),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.summaryId, {
+    await ctx.db.patch("summaries", args.summaryId, {
       isStreaming: false,
       lastUpdatedAt: Date.now(),
     });
@@ -266,14 +266,14 @@ export const finishStreamingWithDigests = internalMutation({
     newDigestIds: v.array(v.id("digests")),
   },
   handler: async (ctx, args) => {
-    const summary = await ctx.db.get(args.summaryId);
+    const summary = await ctx.db.get("summaries", args.summaryId);
     if (!summary) {
       throw new Error("Summary not found");
     }
 
     const updatedDigestIds = [...summary.includedDigestIds, ...args.newDigestIds];
 
-    await ctx.db.patch(args.summaryId, {
+    await ctx.db.patch("summaries", args.summaryId, {
       includedDigestIds: updatedDigestIds,
       isStreaming: false,
       lastUpdatedAt: Date.now(),
@@ -289,7 +289,7 @@ export const startStreaming = internalMutation({
     summaryId: v.id("summaries"),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.summaryId, {
+    await ctx.db.patch("summaries", args.summaryId, {
       isStreaming: true,
       lastUpdatedAt: Date.now(),
     });
@@ -304,7 +304,7 @@ export const getById = internalQuery({
     summaryId: v.id("summaries"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.summaryId);
+    return await ctx.db.get("summaries", args.summaryId);
   },
 });
 

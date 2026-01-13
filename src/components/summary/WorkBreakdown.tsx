@@ -25,7 +25,7 @@ export function WorkBreakdown({ workBreakdown }: WorkBreakdownProps) {
     .filter(([_, data]) => data !== undefined)
     .map(([category, data]) => ({
       category,
-      ...data!,
+      ...data,
       ...categoryLabels[category],
     }))
     .sort((a, b) => b.percentage - a.percentage);

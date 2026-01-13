@@ -65,7 +65,7 @@ export const updateStatus = internalMutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.eventId, {
+    await ctx.db.patch("events", args.eventId, {
       status: args.status,
       errorMessage: args.errorMessage,
       processedAt: args.status === "completed" || args.status === "failed" || args.status === "skipped"
@@ -96,7 +96,7 @@ export const updateFileDiffs = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.eventId, {
+    await ctx.db.patch("events", args.eventId, {
       fileDiffs: args.fileDiffs,
     });
   },
@@ -106,7 +106,7 @@ export const get = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    const event = await ctx.db.get(args.eventId);
+    const event = await ctx.db.get("events", args.eventId);
     
     if (!event) {
       throw new Error("Event not found");
@@ -122,7 +122,7 @@ export const get = query({
 export const getById = internalQuery({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.eventId);
+    return await ctx.db.get("events", args.eventId);
   },
 });
 

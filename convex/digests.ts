@@ -171,7 +171,7 @@ export const update = internalMutation({
       update.createdAt = Date.now();
     }
 
-    await ctx.db.patch(args.digestId, update);
+    await ctx.db.patch("digests", args.digestId, update);
   },
 });
 
@@ -256,7 +256,7 @@ export const getByEvent = query({
     const user = await getCurrentUser(ctx);
     
     // Get the event to check repository ownership
-    const event = await ctx.db.get(args.eventId);
+    const event = await ctx.db.get("events", args.eventId);
     if (!event) {
       throw new Error("Event not found");
     }
@@ -274,7 +274,7 @@ export const getByEvent = query({
 export const getById = internalQuery({
   args: { digestId: v.id("digests") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.digestId);
+    return await ctx.db.get("digests", args.digestId);
   },
 });
 
@@ -347,7 +347,7 @@ export const createPerspectivesBatch = internalMutation({
 export const getPerspectivesByDigest = query({
   args: { digestId: v.id("digests") },
   handler: async (ctx, args) => {
-    const digest = await ctx.db.get(args.digestId);
+    const digest = await ctx.db.get("digests", args.digestId);
     if (!digest) {
       return [];
     }
@@ -366,7 +366,7 @@ export const getPerspectivesByDigest = query({
 export const getEventByDigest = query({
   args: { digestId: v.id("digests") },
   handler: async (ctx, args) => {
-    const digest = await ctx.db.get(args.digestId);
+    const digest = await ctx.db.get("digests", args.digestId);
     if (!digest) {
       return null;
     }
@@ -375,6 +375,6 @@ export const getEventByDigest = query({
     const user = await getCurrentUser(ctx);
     await verifyRepositoryOwnership(ctx, digest.repositoryId, user._id);
 
-    return await ctx.db.get(digest.eventId);
+    return await ctx.db.get("events", digest.eventId);
   },
 });

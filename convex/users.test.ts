@@ -136,7 +136,7 @@ describe("users.updateApiKeys", () => {
     
     // Verify the keys were updated
     const updatedUser = await userA.run(async (ctx) => {
-      return await ctx.db.get(userId);
+      return await ctx.db.get("users", userId);
     });
     expect(updatedUser?.apiKeys?.openai).toBe("test-key");
   });

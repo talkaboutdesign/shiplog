@@ -131,7 +131,7 @@ describe("repositories.toggleSyncStatus", () => {
     
     // Verify the status was updated
     const updatedRepo = await userA.run(async (ctx) => {
-      return await ctx.db.get(repoId);
+      return await ctx.db.get("repositories", repoId);
     });
     expect(updatedRepo?.isActive).toBe(false);
   });
