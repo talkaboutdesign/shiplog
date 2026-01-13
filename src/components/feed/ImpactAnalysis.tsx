@@ -138,12 +138,10 @@ export function ImpactAnalysis({
             {showFiles && (
               <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">
                 {event?.fileDiffs?.map((file, index) => (
-                  <div
+                  <Skeleton
                     key={index}
-                    className="text-xs text-muted-foreground font-mono truncate"
-                  >
-                    {file.filename}
-                  </div>
+                    className="h-4 w-full"
+                  />
                 ))}
               </div>
             )}
