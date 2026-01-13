@@ -235,26 +235,68 @@ export const generateSummary = internalAction({
 
     prompt += `\nGenerate a comprehensive executive report based on these digests. Focus on business impact and key achievements.`;
 
-    try {
-      const { object } = await generateObject({
-        model,
-        schema: SummarySchema,
-        system: SUMMARY_SYSTEM_PROMPT,
-        prompt,
-      });
-
-      // Transform AI response (array format) to database format (object format)
-      return transformToSummaryData(object, validDigests.length);
-    } catch (error) {
-      // Log detailed error for debugging
-      console.error("Error generating summary with AI:", {
-        provider: preferredProvider,
-        digestCount: validDigests.length,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
+    // Retry logic for generateObject with schema validation fallbacks
+    let object: z.infer<typeof SummarySchema> | null = null;
+    const maxRetries = 3;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await generateObject({
+          model,
+          schema: SummarySchema,
+          system: SUMMARY_SYSTEM_PROMPT,
+          prompt: attempt > 0 ? `${prompt}\n\nRemember: Respond with valid JSON matching the schema. Ensure workBreakdownItems is an array of objects with category, percentage, and count fields.` : prompt,
+        });
+        object = result.object;
+        break; // Success, exit retry loop
+      } catch (error: any) {
+        // Handle schema validation errors where the model returned wrong structure
+        if (error.value && typeof error.value === "object") {
+          try {
+            // Try to fix common issues: ensure workBreakdownItems is an array
+            const fixed = { ...error.value };
+            if (fixed.workBreakdown && !Array.isArray(fixed.workBreakdownItems)) {
+              // Convert workBreakdown object to workBreakdownItems array
+              fixed.workBreakdownItems = Object.entries(fixed.workBreakdown)
+                .filter(([_, value]) => value && typeof value === "object")
+                .map(([category, value]: [string, any]) => ({
+                  category,
+                  percentage: value.percentage || 0,
+                  count: value.count || 0,
+                }));
+              delete fixed.workBreakdown;
+            }
+            const validated = SummarySchema.parse(fixed);
+            console.log("Successfully fixed schema validation error");
+            object = validated;
+            break; // Successfully fixed, exit retry loop
+          } catch (parseError) {
+            // If fixing didn't work, continue to other fallbacks
+          }
+        }
+        
+        // If this is the last attempt, throw the error
+        if (attempt === maxRetries - 1) {
+          console.error(`Failed to generate summary after ${maxRetries} attempts:`, {
+            provider: preferredProvider,
+            digestCount: validDigests.length,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+          throw error;
+        }
+        
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+      }
     }
+
+    if (!object) {
+      throw new Error("Failed to generate summary after all retries");
+    }
+
+    // Transform AI response (array format) to database format (object format)
+    return transformToSummaryData(object, validDigests.length);
   },
 });
 
@@ -351,28 +393,70 @@ export const updateSummaryWithDigest = internalAction({
     }
     prompt += `\nUpdate the summary to include this new digest. Intelligently merge it without rewriting everything. Recalculate workBreakdownItems and totalItems to include this new digest.`;
 
-    try {
-      const { object } = await generateObject({
-        model,
-        schema: SummarySchema,
-        system: INCREMENTAL_UPDATE_SYSTEM_PROMPT,
-        prompt,
-      });
-
-      // Transform AI response and set correct total items count
-      const newTotalItems = currentTotalItems + 1;
-      return transformToSummaryData(object, newTotalItems);
-    } catch (error) {
-      // Log detailed error for debugging
-      console.error("Error updating summary with AI:", {
-        provider: preferredProvider,
-        summaryId: args.summaryId,
-        digestId: args.digestId,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
+    // Retry logic for generateObject with schema validation fallbacks
+    let object: z.infer<typeof SummarySchema> | null = null;
+    const maxRetries = 3;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await generateObject({
+          model,
+          schema: SummarySchema,
+          system: INCREMENTAL_UPDATE_SYSTEM_PROMPT,
+          prompt: attempt > 0 ? `${prompt}\n\nRemember: Respond with valid JSON matching the schema. Ensure workBreakdownItems is an array of objects with category, percentage, and count fields.` : prompt,
+        });
+        object = result.object;
+        break; // Success, exit retry loop
+      } catch (error: any) {
+        // Handle schema validation errors where the model returned wrong structure
+        if (error.value && typeof error.value === "object") {
+          try {
+            // Try to fix common issues: ensure workBreakdownItems is an array
+            const fixed = { ...error.value };
+            if (fixed.workBreakdown && !Array.isArray(fixed.workBreakdownItems)) {
+              // Convert workBreakdown object to workBreakdownItems array
+              fixed.workBreakdownItems = Object.entries(fixed.workBreakdown)
+                .filter(([_, value]) => value && typeof value === "object")
+                .map(([category, value]: [string, any]) => ({
+                  category,
+                  percentage: value.percentage || 0,
+                  count: value.count || 0,
+                }));
+              delete fixed.workBreakdown;
+            }
+            const validated = SummarySchema.parse(fixed);
+            console.log("Successfully fixed schema validation error");
+            object = validated;
+            break; // Successfully fixed, exit retry loop
+          } catch (parseError) {
+            // If fixing didn't work, continue to other fallbacks
+          }
+        }
+        
+        // If this is the last attempt, throw the error
+        if (attempt === maxRetries - 1) {
+          console.error(`Failed to generate summary update after ${maxRetries} attempts:`, {
+            provider: preferredProvider,
+            summaryId: args.summaryId,
+            digestId: args.digestId,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+          throw error;
+        }
+        
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+      }
     }
+
+    if (!object) {
+      throw new Error("Failed to generate summary update after all retries");
+    }
+
+    // Transform AI response and set correct total items count
+    const newTotalItems = currentTotalItems + 1;
+    return transformToSummaryData(object, newTotalItems);
   },
 });
 
