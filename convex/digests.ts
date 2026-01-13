@@ -577,14 +577,6 @@ export const generateDigest = internalAction({
     });
     const updatedFileDiffs = updatedEvent?.fileDiffs;
     
-    // Debug logging
-    console.log("Impact analysis check:", {
-      indexStatus: repository.indexStatus,
-      hasFileDiffs: !!updatedFileDiffs,
-      fileDiffsCount: updatedFileDiffs?.length || 0,
-      eventId: args.eventId,
-    });
-    
     if (repository.indexStatus === "completed" && updatedFileDiffs && updatedFileDiffs.length > 0) {
       // Prepare truncated file diffs
       const truncatedFileDiffs = updatedFileDiffs
@@ -617,10 +609,6 @@ export const generateDigest = internalAction({
       if (truncatedFileDiffs.length > 0) {
         // Schedule impact analysis to run asynchronously (non-blocking)
         // This allows the digest to complete immediately while impact analysis runs in background
-        console.log("Scheduling impact analysis:", {
-          digestId,
-          fileDiffsCount: truncatedFileDiffs.length,
-        });
         await ctx.scheduler.runAfter(0, internal.digests.analyzeImpactAsync, {
           digestId,
           repositoryId,
@@ -629,11 +617,6 @@ export const generateDigest = internalAction({
           commitMessage,
           prTitle,
           prBody,
-        });
-      } else {
-        console.log("Skipping impact analysis: no file diffs with patches", {
-          totalFileDiffs: updatedFileDiffs.length,
-          truncatedCount: truncatedFileDiffs.length,
         });
       }
     }
@@ -679,10 +662,6 @@ export const analyzeImpactAsync = internalAction({
     prBody: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    console.log("Starting async impact analysis:", {
-      digestId: args.digestId,
-      fileDiffsCount: args.fileDiffs.length,
-    });
     try {
       // Run impact analysis
       const impactResult = await ctx.runAction(
@@ -733,15 +712,6 @@ export const analyzeImpactAsync = internalAction({
             confidence: impactData.confidence,
             overallExplanation: impactData.overallExplanation,
           },
-        });
-        console.log("Impact analysis completed successfully:", {
-          digestId: args.digestId,
-          affectedSurfacesCount: affectedSurfaces.length,
-        });
-      } else {
-        console.log("Impact analysis returned no data:", {
-          digestId: args.digestId,
-          hasResult: !!impactResult,
         });
       }
     } catch (error) {
