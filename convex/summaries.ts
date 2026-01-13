@@ -388,6 +388,11 @@ export const updateSummariesForDigest = internalAction({
     digestCreatedAt: v.number(),
   },
   handler: async (ctx, args) => {
+    console.log("updateSummariesForDigest called", {
+      repositoryId: args.repositoryId,
+      digestId: args.digestId,
+      digestCreatedAt: args.digestCreatedAt,
+    });
     const periods: PeriodType[] = ["daily", "weekly", "monthly"];
     const now = Date.now();
 
@@ -399,10 +404,15 @@ export const updateSummariesForDigest = internalAction({
       // Only update summaries for the current period (not old periods)
       if (periodEnd <= now) {
         // This is an old period, skip it
+        console.log(`Skipping ${period} summary update - period ended`, {
+          periodEnd,
+          now,
+        });
         continue;
       }
 
       // Check if summary exists
+      console.log(`Checking for ${period} summary`, { periodStart, periodEnd });
       const existingSummary = await ctx.runQuery(internal.summaries.getByRepositoryPeriod, {
         repositoryId: args.repositoryId,
         period,

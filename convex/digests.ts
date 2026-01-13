@@ -628,6 +628,11 @@ export const generateDigest = internalAction({
     });
 
     // Step 10: Trigger summary updates (replaces workflow onComplete handler)
+    console.log("Scheduling updateSummariesForDigest", {
+      repositoryId,
+      digestId,
+      digestCreatedAt: Date.now(),
+    });
     await ctx.scheduler.runAfter(0, internal.summaries.updateSummariesForDigest, {
       repositoryId,
       digestId,
