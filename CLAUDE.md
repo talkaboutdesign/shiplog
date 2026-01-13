@@ -94,7 +94,6 @@ Tests use `convex-test` with `vitest` in edge-runtime environment. Test files ar
 
 **Module paths for nested directories:**
 - Convex uses file-based routing with nested directories
-- `convex/rag/searcher.ts` exports become `internal.rag.searcher.*`, NOT `internal.rag.*`
 - `convex/cache/compute.ts` exports become `internal.cache.compute.*`
 - Always verify the full path matches the directory structure
 

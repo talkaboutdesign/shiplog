@@ -137,7 +137,7 @@ export const getSurfacesByPaths = internalQuery({
   },
 });
 
-// Get all surfaces for a repository (for RAG indexing)
+// Get all surfaces for a repository (used for impact analysis)
 export const getSurfacesByRepositoryInternal = internalQuery({
   args: {
     repositoryId: v.id("repositories"),

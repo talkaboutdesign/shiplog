@@ -132,30 +132,7 @@ export const generateDigest = internalAction({
     }
 
     // Build prompt from event (before cache check)
-    let prompt = buildEventPrompt(event, fileDiffs);
-    
-    // Optionally use RAG to find similar past changes for context
-    try {
-      const commitMessage = event.type === "push" 
-        ? event.payload.commits?.[0]?.message || ""
-        : event.payload.pull_request?.title || "";
-      
-      if (commitMessage) {
-        const similarResults = await ctx.runAction(internal.rag.searcher.searchSimilarChanges, {
-          repositoryId: args.repositoryId,
-          userId: args.userId,
-          query: commitMessage,
-          limit: 3,
-        });
-        
-        if (similarResults.results && similarResults.results.length > 0) {
-          prompt += `\n\nSimilar past changes for context:\n${similarResults.results.map((r: any, i: number) => `${i + 1}. ${r.text?.substring(0, 200)}...`).join("\n")}`;
-        }
-      }
-    } catch (error) {
-      // RAG search is optional, continue without it
-      console.log("RAG search failed, continuing without similar changes context:", error);
-    }
+    const prompt = buildEventPrompt(event, fileDiffs);
 
     // Check cache first (key includes repositoryId for security)
     const eventHash = createEventHash(event);

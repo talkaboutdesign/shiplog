@@ -1,5 +1,4 @@
 import { Id } from "../../convex/_generated/dataModel";
-import ragTest from "@convex-dev/rag/test";
 
 /**
  * Test fixtures and helpers for common test setup
@@ -9,8 +8,7 @@ import ragTest from "@convex-dev/rag/test";
  * Register Convex components for testing
  */
 export function registerTestComponents(t: any) {
-  // Register RAG component using its test helper
-  ragTest.register(t);
+  // Component registration can be added here as needed
 }
 
 export interface TestUser {

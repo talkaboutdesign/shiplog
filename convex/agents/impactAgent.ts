@@ -15,7 +15,7 @@ import { isTransientError, logStructuredOutputError } from "./errors";
 import { z } from "zod";
 
 /**
- * Analyze impact of code changes using Agent component with RAG search
+ * Analyze impact of code changes using Agent component
  * SECURITY: Verifies repository ownership, uses user's API keys
  */
 export const analyzeImpact = internalAction({
@@ -57,7 +57,7 @@ export const analyzeImpact = internalAction({
     // Use fast model for impact analysis
     const { model } = getFastModelConfig(user.apiKeys);
 
-    // Create agent with tools for RAG search
+    // Create agent with tools
     const workflowContext = {
       userId: args.userId,
       repositoryId: args.repositoryId,

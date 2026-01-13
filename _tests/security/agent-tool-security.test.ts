@@ -37,7 +37,4 @@ describe("Agent Tool Security", () => {
     // The tools receive workflowContext with repositoryId and verify it matches
     // Tools verify ownership before accessing any data
   });
-
-  // RAG namespace test removed - RAG component has test environment compatibility issues
-  // The implementation is correct (uses `repo-${repositoryId}` namespace in convex/rag/searcher.ts)
 });
