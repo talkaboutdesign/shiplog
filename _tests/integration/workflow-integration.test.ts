@@ -6,8 +6,8 @@ import { setupTwoUsersWithRepos } from "../helpers/testFixtures";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
-describe("Workflow Component Integration", () => {
-  it("should execute digest generation workflow end-to-end", async () => {
+describe("Digest Generation Integration", () => {
+  it("should execute digest generation end-to-end", async () => {
     const t = convexTest(schema, modules);
     const { userA, repoA } = await setupTwoUsersWithRepos(t);
 
@@ -47,14 +47,15 @@ describe("Workflow Component Integration", () => {
     });
 
     if (user) {
-      // Start workflow
+      // Start digest generation
       // Note: This will fail without real API keys, but tests the structure
       try {
-        const workflowId = await userA.action(internal.workflows.digestWorkflow.startDigestWorkflow, {
+        const result = await userA.action(internal.digests.generateDigest, {
           eventId,
         });
 
-        expect(workflowId).toBeDefined();
+        expect(result).toBeDefined();
+        expect(result.digestId).toBeDefined();
       } catch (error) {
         // Expected to fail without real API keys, but verify the function exists
         expect(error).toBeDefined();
@@ -62,13 +63,13 @@ describe("Workflow Component Integration", () => {
     }
   });
 
-  it("should trigger summary updates on workflow completion", async () => {
+  it("should trigger summary updates on digest completion", async () => {
     const t = convexTest(schema, modules);
     const { userA, repoA } = await setupTwoUsersWithRepos(t);
 
-    // This test verifies that the onComplete handler is set up correctly
-    // The actual triggering happens when the workflow completes
-    // We verify the handler exists and is configured
+    // This test verifies that summary updates are triggered correctly
+    // The actual triggering happens when the digest generation completes
+    // The generateDigest action calls internal.summaries.updateSummariesForDigest
     
     // Create a digest
     const eventId = await userA.run(async (ctx) => {
@@ -97,8 +98,8 @@ describe("Workflow Component Integration", () => {
     });
 
     // Verify summary update is triggered (simulated)
-    // The onComplete handler calls internal.summaries.updateSummariesForDigest
-    // The workflow's onComplete handler is configured in digestWorkflow.ts
+    // The generateDigest action calls internal.summaries.updateSummariesForDigest
+    // This is configured in digests.ts generateDigest action
     expect(digestId).toBeDefined();
     expect(eventId).toBeDefined();
   });

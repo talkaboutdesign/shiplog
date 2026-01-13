@@ -1,7 +1,9 @@
-import { query, internalMutation, internalQuery } from "./_generated/server";
+import { query, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
-import { Id } from "./_generated/dataModel";
+import { Id, Doc } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
+import { FileDiff, Perspective } from "./types";
 
 export const create = internalMutation({
   args: {
@@ -77,9 +79,8 @@ export const create = internalMutation({
       createdAt: Date.now(),
     });
 
-    // Summary updates are now triggered by workflow onComplete handler
+    // Summary updates are triggered by generateDigest action after digest creation
     // This preserves the flow: digest creation → summary update
-    // The workflow's onComplete handler calls internal.summaries.updateSummariesForDigest
 
     return digestId;
   },
@@ -372,5 +373,308 @@ export const getEventByDigest = query({
     await verifyRepositoryOwnership(ctx, digest.repositoryId, user._id);
 
     return await ctx.db.get("events", digest.eventId);
+  },
+});
+
+/**
+ * Generate digest for an event (replaces workflow)
+ * Orchestrates: event fetch → file diffs → digest generation → perspectives → impact analysis → summary update
+ * SECURITY: Verifies repository ownership in first step
+ */
+export const generateDigest = internalAction({
+  args: {
+    eventId: v.id("events"),
+  },
+  handler: async (ctx, args): Promise<{ digestId: Id<"digests">; repositoryId: Id<"repositories">; userId: Id<"users"> }> => {
+    // Step 1: Fetch event and verify ownership
+    const event = await ctx.runQuery(internal.events.getById, {
+      eventId: args.eventId,
+    });
+    if (!event) {
+      throw new Error("Event not found");
+    }
+
+    // Get repository to get userId
+    const repository = await ctx.runQuery(internal.repositories.getById, {
+      repositoryId: event.repositoryId,
+    });
+    if (!repository) {
+      throw new Error("Repository not found");
+    }
+
+    // CRITICAL: Verify ownership (repository.userId is the owner)
+    // Store userId in context for subsequent steps
+    const userId = repository.userId;
+    const repositoryId = event.repositoryId;
+
+    // Update event status to processing
+    await ctx.runMutation(internal.events.updateStatus, {
+      eventId: args.eventId,
+      status: "processing",
+    });
+
+    // Get user and API keys
+    const user = await ctx.runQuery(internal.users.getById, {
+      userId,
+    });
+
+    if (!user || !user.apiKeys) {
+      await ctx.runMutation(internal.events.updateStatus, {
+        eventId: args.eventId,
+        status: "skipped",
+        errorMessage: "No API keys configured",
+      });
+      // Return early with minimal data
+      throw new Error("No API keys configured - skipping digest generation");
+    }
+
+    // Extract metadata immediately
+    const contributors = [event.actorGithubUsername];
+    const metadata: any = {};
+    
+    if (event.type === "pull_request") {
+      const pr = event.payload.pull_request;
+      if (pr) {
+        metadata.prNumber = pr.number;
+        metadata.prUrl = pr.html_url;
+        metadata.prState = pr.state;
+      }
+    } else if (event.type === "push") {
+      metadata.commitCount = event.payload.commits?.length || 0;
+      metadata.compareUrl = event.payload.compare;
+      metadata.branch = event.payload.ref?.replace("refs/heads/", "");
+    }
+
+    // Create digest placeholder
+    const placeholderTitle = event.type === "push" 
+      ? `Push: ${metadata.commitCount || 0} commit(s)`
+      : event.type === "pull_request"
+      ? event.payload.pull_request?.title || "Pull Request"
+      : "Processing event...";
+
+    // Step 2: Create digest placeholder
+    const digestId = await ctx.runMutation(internal.digests.create, {
+      repositoryId,
+      eventId: args.eventId,
+      title: placeholderTitle,
+      summary: "Analyzing changes...",
+      category: undefined,
+      contributors,
+      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+      aiModel: user.apiKeys.preferredProvider || "openai",
+      whyThisMatters: undefined,
+      impactAnalysis: undefined,
+    });
+
+    // Step 3: Check and trigger indexing if needed (non-blocking)
+    await ctx.runAction(internal.surfaces.checkAndIndexIfNeeded, {
+      repositoryId,
+    });
+
+    // Step 4: Generate digest using agent
+    // File diffs are fetched in the digest agent, which will store them for later use
+    const digestResult = await ctx.runAction(
+      internal.agents.digestAgent.generateDigest,
+      {
+        eventId: args.eventId,
+        repositoryId,
+        userId,
+      }
+    );
+
+    const { digestData } = digestResult;
+
+    // Step 5: Store immediate perspectives from digest generation (if any)
+    const immediatePerspectives = digestData.perspectives || [];
+    if (immediatePerspectives.length > 0) {
+      await ctx.runMutation(internal.digests.createPerspectivesBatch, {
+        digestId,
+        perspectives: immediatePerspectives.map((p: Perspective) => ({
+          perspective: p.perspective,
+          title: p.title,
+          summary: p.summary,
+          confidence: p.confidence,
+        })),
+      });
+    }
+
+    // Step 6: Update digest with AI-generated content
+    await ctx.runMutation(internal.digests.update, {
+      digestId,
+      title: digestData.title,
+      summary: digestData.summary,
+      category: digestData.category,
+      whyThisMatters: digestData.whyThisMatters,
+    });
+
+    // Step 7: Determine which perspectives are relevant and generate in parallel
+    const relevantPerspectives: Array<"bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = [];
+    
+    if (digestData.category === "bugfix") relevantPerspectives.push("bugfix");
+    if (digestData.category === "feature") relevantPerspectives.push("feature");
+    
+    // Check file paths for UI components (if fileDiffs available)
+    // Re-fetch event to get file diffs
+    const eventWithDiffs = await ctx.runQuery(internal.events.getById, {
+      eventId: args.eventId,
+    });
+    const eventFileDiffs = eventWithDiffs?.fileDiffs;
+    
+    if (eventFileDiffs?.some((f: FileDiff) => f.filename.match(/\.(tsx|jsx)$/) || f.filename.includes("component"))) {
+      relevantPerspectives.push("ui");
+    }
+    
+    // Always generate at least one perspective
+    if (relevantPerspectives.length === 0) {
+      relevantPerspectives.push(digestData.category as any || "refactor");
+    }
+
+    // Determine which perspectives were already generated and which need async generation
+    const immediatePerspectiveTypes = new Set(immediatePerspectives.map((p: Perspective) => p.perspective));
+    const perspectivesToGenerateAsync = relevantPerspectives
+      .filter(p => !immediatePerspectiveTypes.has(p))
+      .slice(0, 3); // Limit to 3 total perspectives
+
+    // Generate additional perspectives in parallel
+    if (perspectivesToGenerateAsync.length > 0) {
+      const perspectivePromises = perspectivesToGenerateAsync.map((perspective) =>
+        ctx.runAction(
+          internal.agents.perspectiveAgent.generatePerspective,
+          {
+            digestId,
+            repositoryId,
+            userId,
+            perspective,
+          }
+        )
+      );
+
+      const perspectiveResults = await Promise.all(perspectivePromises);
+      
+      // Store successful perspectives
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const validPerspectives = perspectiveResults
+        .filter((r: any) => r?.perspectiveData)
+        .map((r: any) => r.perspectiveData);
+
+      if (validPerspectives.length > 0) {
+        await ctx.runMutation(internal.digests.createPerspectivesBatch, {
+          digestId,
+          perspectives: validPerspectives.map((p: Perspective) => ({
+            perspective: p.perspective,
+            title: p.title,
+            summary: p.summary,
+            confidence: p.confidence,
+          })),
+        });
+      }
+    }
+
+    // Step 8: Run impact analysis (if surfaces exist and file diffs available)
+    // Re-fetch event to get file diffs that may have been stored by digest agent
+    const updatedEvent = await ctx.runQuery(internal.events.getById, {
+      eventId: args.eventId,
+    });
+    const updatedFileDiffs = updatedEvent?.fileDiffs;
+    
+    if (repository.indexStatus === "completed" && updatedFileDiffs && updatedFileDiffs.length > 0) {
+      // Prepare truncated file diffs
+      const truncatedFileDiffs = updatedFileDiffs
+        .filter((f: any) => f.patch && f.patch.length > 0)
+        .sort((a: any, b: any) => (b.additions + b.deletions) - (a.additions + a.deletions))
+        .slice(0, 8)
+        .map((f: any) => ({
+          filename: f.filename,
+          status: f.status,
+          additions: f.additions,
+          deletions: f.deletions,
+          patch: f.patch?.substring(0, 2500),
+        }));
+
+      // Extract commit context
+      let commitMessage: string | undefined;
+      let prTitle: string | undefined;
+      let prBody: string | undefined;
+
+      if (event.type === "push") {
+        const commits = event.payload.commits || [];
+        commitMessage = commits.map((c: any) => c.message).join("\n").substring(0, 1000);
+      } else if (event.type === "pull_request") {
+        const pr = event.payload.pull_request;
+        prTitle = pr?.title;
+        prBody = pr?.body?.substring(0, 2000);
+        commitMessage = prTitle;
+      }
+
+      if (truncatedFileDiffs.length > 0) {
+        // Run impact analysis
+        const impactResult = await ctx.runAction(
+          internal.agents.impactAgent.analyzeImpact,
+          {
+            digestId,
+            repositoryId,
+            userId,
+            fileDiffs: truncatedFileDiffs,
+            commitMessage,
+            prTitle,
+            prBody,
+          }
+        );
+
+        // Update digest with impact analysis if successful
+        if (impactResult?.impactData) {
+          const impactData = impactResult.impactData;
+          
+          // Map file paths to surface IDs
+          const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
+            repositoryId,
+            filePaths: impactData.affectedFiles.map((af: any) => af.filePath),
+          });
+
+          const affectedSurfaces = impactData.affectedFiles
+            .map((af: any) => {
+              const matchingSurfaces = surfaces.filter((s: Doc<"codeSurfaces">) => s.filePath === af.filePath);
+              const primarySurface = matchingSurfaces[0];
+              if (!primarySurface) {
+                return null;
+              }
+              return {
+                surfaceId: primarySurface._id,
+                surfaceName: primarySurface.name,
+                impactType: "modified" as const,
+                riskLevel: af.riskLevel,
+                confidence: af.confidence,
+              };
+            })
+            .filter((af: any): af is NonNullable<typeof af> => af !== null);
+
+          await ctx.runMutation(internal.digests.update, {
+            digestId,
+            impactAnalysis: {
+              affectedSurfaces,
+              overallRisk: impactData.overallRisk,
+              confidence: impactData.confidence,
+              overallExplanation: impactData.overallExplanation,
+            },
+          });
+        }
+      }
+    }
+
+    // Step 9: Update event status - digest is ready
+    await ctx.runMutation(internal.events.updateStatus, {
+      eventId: args.eventId,
+      status: "completed",
+    });
+
+    // Step 10: Trigger summary updates (replaces workflow onComplete handler)
+    await ctx.scheduler.runAfter(0, internal.summaries.updateSummariesForDigest, {
+      repositoryId,
+      digestId,
+      digestCreatedAt: Date.now(),
+    });
+
+    // Return digestId for tracking
+    return { digestId, repositoryId, userId };
   },
 });

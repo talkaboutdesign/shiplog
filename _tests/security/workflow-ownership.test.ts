@@ -7,8 +7,8 @@ import { expectOwnershipError } from "../helpers/testHelpers";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
-describe("Workflow Ownership", () => {
-  it("should prevent users from starting workflows for other users' repositories", async () => {
+describe("Digest Generation Ownership", () => {
+  it("should prevent users from generating digests for other users' repositories", async () => {
     const t = convexTest(schema, modules);
     const { userA, userB, repoB } = await setupTwoUsersWithRepos(t);
 
@@ -27,19 +27,19 @@ describe("Workflow Ownership", () => {
       });
     });
 
-    // User A should not be able to start workflow for User B's repository
-    // This is tested at the workflow start level
-    // The workflow itself will verify ownership in the first step
+    // User A should not be able to generate digest for User B's repository
+    // This is tested at the action level
+    // The generateDigest action verifies ownership in the first step
     const userAId = await userA.run(async (ctx) => {
       return (await ctx.db.query("users").withIndex("by_clerk_id", (q) => q.eq("clerkId", "user_a_id")).first())!._id;
     });
 
-    // The workflow start action should verify ownership
-    // Since startDigestWorkflow is internal, we test that the workflow verifies in first step
-    // The workflow will fail if ownership doesn't match
+    // The generateDigest action should verify ownership
+    // Since generateDigest is internal, we test that it verifies in first step
+    // The action will fail if ownership doesn't match
   });
 
-  it("should verify ownership in workflow first step", async () => {
+  it("should verify ownership in digest generation first step", async () => {
     const t = convexTest(schema, modules);
     const { userA, repoA } = await setupTwoUsersWithRepos(t);
 
@@ -58,10 +58,10 @@ describe("Workflow Ownership", () => {
       });
     });
 
-    // Start workflow - should succeed for own repository
+    // Start digest generation - should succeed for own repository
     // Note: This will fail without real API keys, but tests the structure
     try {
-      await userA.action(internal.workflows.digestWorkflow.startDigestWorkflow, {
+      await userA.action(internal.digests.generateDigest, {
         eventId,
       });
     } catch (error) {
