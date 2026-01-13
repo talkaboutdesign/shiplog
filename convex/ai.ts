@@ -35,7 +35,6 @@ const ImpactAnalysisSchema = z.object({
       impactType: z.enum(["modified", "added", "deleted"]),
       riskLevel: z.enum(["low", "medium", "high"]),
       confidence: z.number().min(0).max(100),
-      explanation: z.string().describe("Brief senior engineer notes. Be specific: what bugs/issues found (with line/function references if possible), what looks suspicious, what's the impact. If nothing concerning, briefly note why. Examples: 'Missing null check on user.id access', 'Potential race condition in async function fetchData', 'High risk: utility used by 15+ files', 'Clean refactor, no logic changes'. Do NOT explain confidence scores."),
     })
   ),
   overallRisk: z.enum(["low", "medium", "high"]),
@@ -636,12 +635,6 @@ For each affected surface (match file paths to known surfaces):
    - 50-79: Good understanding but some ambiguity
    - 20-49: Limited context or unclear changes
    - 0-19: Very unclear, missing critical context
-4. Explanation: Write like brief notes to a senior engineer. Be specific:
-   - What bugs/issues did you find? (e.g., "Missing null check on line X", "Potential race condition in async function Y")
-   - What looks suspicious? (e.g., "Removed error handling without replacement", "Changed API contract without migration")
-   - What's the impact? (e.g., "High risk: This utility is used by 15+ files", "Security concern: User input not sanitized")
-   - If nothing concerning: Briefly note why (e.g., "Clean refactor, no logic changes", "Well-tested utility function")
-   Do NOT explain confidence scores - they're displayed separately.
 
 Overall assessment:
 Provide overall risk level and write like briefing a senior engineer. Focus on:
@@ -670,7 +663,6 @@ Be concise and specific. Do NOT start with "Overall Assessment:" or repeat the r
                 impactType: af.impactType,
                 riskLevel: af.riskLevel,
                 confidence: af.confidence,
-                explanation: af.explanation,
               };
             })
             .filter((af): af is NonNullable<typeof af> => af !== null);

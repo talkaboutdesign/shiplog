@@ -162,6 +162,8 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
               <ImpactAnalysis
                 impactAnalysis={digest.impactAnalysis}
                 repositoryId={digest.repositoryId}
+                repositoryFullName={displayRepositoryName}
+                digestMetadata={digest.metadata}
                 event={event ? { fileDiffs: event.fileDiffs } : undefined}
                 isProcessing={isMissingImpactAnalysis}
               />
@@ -169,6 +171,8 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
               <ImpactAnalysis
                 impactAnalysis={undefined}
                 repositoryId={digest.repositoryId}
+                repositoryFullName={displayRepositoryName}
+                digestMetadata={digest.metadata}
                 event={event ? { fileDiffs: event.fileDiffs } : undefined}
                 isProcessing={true}
               />
