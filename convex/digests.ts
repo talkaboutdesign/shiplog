@@ -607,57 +607,17 @@ export const generateDigest = internalAction({
       }
 
       if (truncatedFileDiffs.length > 0) {
-        // Run impact analysis
-        const impactResult = await ctx.runAction(
-          internal.agents.impactAgent.analyzeImpact,
-          {
-            digestId,
-            repositoryId,
-            userId,
-            fileDiffs: truncatedFileDiffs,
-            commitMessage,
-            prTitle,
-            prBody,
-          }
-        );
-
-        // Update digest with impact analysis if successful
-        if (impactResult?.impactData) {
-          const impactData = impactResult.impactData;
-          
-          // Map file paths to surface IDs
-          const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
-            repositoryId,
-            filePaths: impactData.affectedFiles.map((af: any) => af.filePath),
-          });
-
-          const affectedSurfaces = impactData.affectedFiles
-            .map((af: any) => {
-              const matchingSurfaces = surfaces.filter((s: Doc<"codeSurfaces">) => s.filePath === af.filePath);
-              const primarySurface = matchingSurfaces[0];
-              if (!primarySurface) {
-                return null;
-              }
-              return {
-                surfaceId: primarySurface._id,
-                surfaceName: primarySurface.name,
-                impactType: "modified" as const,
-                riskLevel: af.riskLevel,
-                confidence: af.confidence,
-              };
-            })
-            .filter((af: any): af is NonNullable<typeof af> => af !== null);
-
-          await ctx.runMutation(internal.digests.update, {
-            digestId,
-            impactAnalysis: {
-              affectedSurfaces,
-              overallRisk: impactData.overallRisk,
-              confidence: impactData.confidence,
-              overallExplanation: impactData.overallExplanation,
-            },
-          });
-        }
+        // Schedule impact analysis to run asynchronously (non-blocking)
+        // This allows the digest to complete immediately while impact analysis runs in background
+        await ctx.scheduler.runAfter(0, internal.digests.analyzeImpactAsync, {
+          digestId,
+          repositoryId,
+          userId,
+          fileDiffs: truncatedFileDiffs,
+          commitMessage,
+          prTitle,
+          prBody,
+        });
       }
     }
 
@@ -676,5 +636,87 @@ export const generateDigest = internalAction({
 
     // Return digestId for tracking
     return { digestId, repositoryId, userId };
+  },
+});
+
+/**
+ * Analyze impact asynchronously (non-blocking)
+ * Runs in background after digest is complete, updates digest when finished
+ */
+export const analyzeImpactAsync = internalAction({
+  args: {
+    digestId: v.id("digests"),
+    repositoryId: v.id("repositories"),
+    userId: v.id("users"),
+    fileDiffs: v.array(
+      v.object({
+        filename: v.string(),
+        status: v.string(),
+        additions: v.number(),
+        deletions: v.number(),
+        patch: v.optional(v.string()),
+      })
+    ),
+    commitMessage: v.optional(v.string()),
+    prTitle: v.optional(v.string()),
+    prBody: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      // Run impact analysis
+      const impactResult = await ctx.runAction(
+        internal.agents.impactAgent.analyzeImpact,
+        {
+          digestId: args.digestId,
+          repositoryId: args.repositoryId,
+          userId: args.userId,
+          fileDiffs: args.fileDiffs,
+          commitMessage: args.commitMessage,
+          prTitle: args.prTitle,
+          prBody: args.prBody,
+        }
+      );
+
+      // Update digest with impact analysis if successful
+      if (impactResult?.impactData) {
+        const impactData = impactResult.impactData;
+        
+        // Map file paths to surface IDs
+        const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
+          repositoryId: args.repositoryId,
+          filePaths: impactData.affectedFiles.map((af: any) => af.filePath),
+        });
+
+        const affectedSurfaces = impactData.affectedFiles
+          .map((af: any) => {
+            const matchingSurfaces = surfaces.filter((s: Doc<"codeSurfaces">) => s.filePath === af.filePath);
+            const primarySurface = matchingSurfaces[0];
+            if (!primarySurface) {
+              return null;
+            }
+            return {
+              surfaceId: primarySurface._id,
+              surfaceName: primarySurface.name,
+              impactType: "modified" as const,
+              riskLevel: af.riskLevel,
+              confidence: af.confidence,
+            };
+          })
+          .filter((af: any): af is NonNullable<typeof af> => af !== null);
+
+        await ctx.runMutation(internal.digests.update, {
+          digestId: args.digestId,
+          impactAnalysis: {
+            affectedSurfaces,
+            overallRisk: impactData.overallRisk,
+            confidence: impactData.confidence,
+            overallExplanation: impactData.overallExplanation,
+          },
+        });
+      }
+    } catch (error) {
+      // Log error but don't throw - impact analysis is optional
+      console.error("Impact analysis failed:", error);
+    }
   },
 });
