@@ -44,7 +44,7 @@ export function Header({ actions }: HeaderProps) {
             </Link>
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <RepoSelector />
           {actions}
           <ThemeToggle />

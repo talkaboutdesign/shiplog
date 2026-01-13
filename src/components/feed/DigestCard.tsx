@@ -1,8 +1,7 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TimeAgo } from "@/components/common/TimeAgo";
 import { PerspectiveBadges } from "./PerspectiveBadges";
 import { WhyThisMatters } from "./WhyThisMatters";
 import { ImpactAnalysis } from "./ImpactAnalysis";
@@ -58,7 +57,7 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
             {/* Timestamp above headline */}
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="h-3 w-3 opacity-70" />
               <span>{formatDistanceToNow(new Date(digest.createdAt), { addSuffix: true })}</span>
             </div>
@@ -77,8 +76,8 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
             {/* Show animated analyzing badge while loading, or show real badges when available */}
             {isProcessing && (!perspectives || perspectives.length === 0) ? (
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className="bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+                <Badge variant="processing">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
                   ANALYZING
                 </Badge>
               </div>

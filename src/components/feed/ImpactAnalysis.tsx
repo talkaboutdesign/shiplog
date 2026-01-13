@@ -23,7 +23,7 @@ interface ImpactAnalysisProps {
   isProcessing?: boolean;
 }
 
-export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessing = false }: ImpactAnalysisProps) {
+export function ImpactAnalysis({ impactAnalysis, repositoryId: _repositoryId, event, isProcessing = false }: ImpactAnalysisProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
 
@@ -42,12 +42,6 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
     return null;
   }
 
-  const riskColors = {
-    low: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
-    medium: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
-    high: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
-  };
-
   // Create a map of surfaceId to surface details
   const surfaceMap = new Map();
   if (surfaces) {
@@ -65,8 +59,8 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
               <span className="text-yellow-600">⚠</span>
               <h4 className="text-sm font-semibold">Codebase Impact Analysis</h4>
             </div>
-            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+            <Badge variant="processing">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
               analyzing risk
             </Badge>
           </div>
@@ -106,8 +100,8 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
     );
   }
 
-  // If impactAnalysis exists but no affected surfaces, don't show
-  if (!impactAnalysis.affectedSurfaces.length) {
+  // At this point, impactAnalysis must exist (we handled the !impactAnalysis case above)
+  if (!impactAnalysis || !impactAnalysis.affectedSurfaces.length) {
     return null;
   }
 
@@ -122,10 +116,7 @@ export function ImpactAnalysis({ impactAnalysis, repositoryId, event, isProcessi
             <h4 className="text-sm font-semibold">Codebase Impact Analysis</h4>
           </div>
           <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={riskColors[impactAnalysis.overallRisk]}
-            >
+            <Badge variant={`risk-${impactAnalysis.overallRisk}` as const}>
               {impactAnalysis.overallRisk} risk
             </Badge>
             <span className="text-xs text-muted-foreground">
