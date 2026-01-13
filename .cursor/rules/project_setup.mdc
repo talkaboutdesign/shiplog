@@ -1,0 +1,54 @@
+---
+description: Project setup and package manager guidelines
+globs: **/*
+---
+
+# Project Setup Guidelines
+
+## Package Manager
+- **ALWAYS use `bun` for package management**
+- Do NOT use `npm`, `yarn`, or `pnpm`
+- Use `bun install` to install dependencies
+- Use `bun add <package>` to add new packages
+- Use `bun remove <package>` to remove packages
+- Use `bun update <package>` to update packages
+- Use `bun run <script>` to run scripts from package.json
+
+## Examples
+
+### Correct Package Management
+```bash
+# Install dependencies
+bun install
+
+# Add a new package
+bun add lucide-react
+
+# Update a package
+bun update convex
+
+# Run a script
+bun run dev
+```
+
+### Incorrect Package Management (DO NOT USE)
+```bash
+# ❌ Don't use npm
+npm install
+npm add package
+npm update package
+
+# ❌ Don't use yarn
+yarn install
+yarn add package
+
+# ❌ Don't use pnpm
+pnpm install
+pnpm add package
+```
+
+## Development Commands
+- Use `bun run dev` to start the development server
+- Use `bun run build` to build the project
+- Use `bun run lint` to run linting
+- Use `bun run test` to run tests
