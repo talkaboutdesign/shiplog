@@ -33,12 +33,16 @@ export function ActivityFeed({ repositoryId }: ActivityFeedProps) {
     ...eventsWithoutDigests.map((e) => ({ type: "event" as const, id: e._id, timestamp: e.occurredAt })),
   ].sort((a, b) => b.timestamp - a.timestamp);
 
+  // Track digest index for collapsible behavior
+  let digestIndex = 0;
+
   return (
     <div className="space-y-4">
       {allItems.map((item) => {
         if (item.type === "digest") {
           const digest = digests.find((d) => d._id === item.id);
-          return digest ? <DigestCard key={digest._id} digest={digest} /> : null;
+          const currentIndex = digestIndex++;
+          return digest ? <DigestCard key={digest._id} digest={digest} index={currentIndex} /> : null;
         } else {
           const event = eventsWithoutDigests.find((e) => e._id === item.id);
           return event ? <EventCard key={event._id} event={event} /> : null;

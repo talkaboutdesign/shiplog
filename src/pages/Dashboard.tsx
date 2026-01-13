@@ -229,9 +229,9 @@ function MultiRepoActivityFeed({
 
   return (
     <div className="space-y-4">
-      {sortedDigests.map((digest) => {
+      {sortedDigests.map((digest, index) => {
         const event = eventMap.get(digest.eventId);
-        return <DigestCard key={digest._id} digest={digest} event={event} />;
+        return <DigestCard key={digest._id} digest={digest} event={event} index={index} />;
       })}
     </div>
   );

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -10,16 +11,20 @@ import { useEvent } from "@/hooks/useEvent";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowRight, Clock } from "lucide-react";
+import { ArrowRight, Clock, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Digest, Event } from "../../../convex/types";
 
 interface DigestCardProps {
   digest: Digest;
   repositoryFullName?: string;
   event?: Event; // Optional event prop to avoid extra query
+  index?: number; // Position in list - first 3 default to expanded
 }
 
-export function DigestCard({ digest, repositoryFullName, event: eventProp }: DigestCardProps) {
+export function DigestCard({ digest, repositoryFullName, event: eventProp, index = 0 }: DigestCardProps) {
+  // First 3 cards (index 0, 1, 2) are expanded by default
+  const [isExpanded, setIsExpanded] = useState(index < 3);
   const contributor = digest.contributors[0] || "unknown";
   const githubUrl = digest.metadata?.prUrl || digest.metadata?.compareUrl;
   const perspectives = usePerspectives(digest._id);
@@ -51,9 +56,43 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
   // Determine event type for UI differentiation
   const isCodeChange = event?.type === "push" || event?.type === "pull_request";
 
+  const handleToggle = () => {
+    setIsExpanded(!isExpanded);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleToggle();
+    }
+  };
+
+  // Check if there's collapsible content to show
+  const hasCollapsibleContent = digest.impactAnalysis || digest.whyThisMatters ||
+    isMissingImpactAnalysis || isMissingWhyThisMatters || githubUrl;
+
   return (
-    <Card>
-      <CardHeader>
+    <Card className="gap-4 py-5">
+      {/* Header - clickable toggle area */}
+      <CardHeader
+        className={cn(
+          "pb-0",
+          hasCollapsibleContent && [
+            "cursor-pointer select-none",
+            "transition-colors duration-150",
+            // Extend to card top edge (Card has py-6), use pt-5 to match py-5
+            "-mt-6 pt-5 rounded-t-xl",
+            "hover:bg-muted/50 focus-visible:bg-muted/50",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          ]
+        )}
+        onClick={hasCollapsibleContent ? handleToggle : undefined}
+        onKeyDown={hasCollapsibleContent ? handleKeyDown : undefined}
+        role={hasCollapsibleContent ? "button" : undefined}
+        tabIndex={hasCollapsibleContent ? 0 : undefined}
+        aria-expanded={hasCollapsibleContent ? isExpanded : undefined}
+        aria-controls={hasCollapsibleContent ? `digest-content-${digest._id}` : undefined}
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
             {/* Timestamp above headline */}
@@ -85,9 +124,20 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
               <PerspectiveBadges perspectives={perspectives} />
             ) : null}
           </div>
+          {/* Expand/collapse indicator */}
+          {hasCollapsibleContent && (
+            <ChevronDown
+              className={cn(
+                "h-5 w-5 text-muted-foreground transition-transform duration-200 flex-shrink-0 mt-1",
+                isExpanded && "rotate-180"
+              )}
+              aria-hidden="true"
+            />
+          )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent>
+        {/* Summary - always visible */}
         {digest.summary && digest.summary !== "Analyzing changes..." ? (
           <p className="text-sm leading-relaxed">{digest.summary}</p>
         ) : (
@@ -98,104 +148,116 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp }: Dig
           </div>
         )}
 
-        {digest.impactAnalysis ? (
-          <ImpactAnalysis
-            impactAnalysis={digest.impactAnalysis}
-            repositoryId={digest.repositoryId}
-            event={event ? { fileDiffs: event.fileDiffs } : undefined}
-            isProcessing={isMissingImpactAnalysis}
-          />
-        ) : isMissingImpactAnalysis ? (
-          <ImpactAnalysis
-            impactAnalysis={undefined}
-            repositoryId={digest.repositoryId}
-            event={event ? { fileDiffs: event.fileDiffs } : undefined}
-            isProcessing={true}
-          />
-        ) : null}
-
-        {digest.whyThisMatters ? (
-          <WhyThisMatters content={digest.whyThisMatters} />
-        ) : isMissingWhyThisMatters ? (
-          <WhyThisMatters content={""} isProcessing={true} />
-        ) : null}
-
-        {/* Footer with all metadata */}
-        <div className="border-t pt-4 mt-4 space-y-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-            {isCodeChange && displayRepositoryName ? (
-              <>
-                <Badge variant="outline" className="text-xs">
-                  {event.type === "push" ? "Code Push" : "Pull Request"} • {displayRepositoryName}
-                </Badge>
-                <span>•</span>
-              </>
-            ) : isCodeChange ? (
-              <>
-                <Badge variant="outline" className="text-xs">
-                  {event.type === "push" ? "Code Push" : "Pull Request"}
-                </Badge>
-                <span>•</span>
-              </>
-            ) : displayRepositoryName ? (
-              <>
-                <span className="font-medium">{displayRepositoryName}</span>
-                <span>•</span>
-              </>
+        {/* Collapsible content - only visible when expanded */}
+        <div
+          id={`digest-content-${digest._id}`}
+          className={cn(
+            "grid transition-all duration-300 ease-in-out",
+            isExpanded ? "grid-rows-[1fr] opacity-100 mt-4" : "grid-rows-[0fr] opacity-0"
+          )}
+        >
+          {/* -m-1 p-1 creates space for focus rings while overflow-hidden clips the animation */}
+          <div className="overflow-hidden -m-1 p-1 space-y-4">
+            {digest.impactAnalysis ? (
+              <ImpactAnalysis
+                impactAnalysis={digest.impactAnalysis}
+                repositoryId={digest.repositoryId}
+                event={event ? { fileDiffs: event.fileDiffs } : undefined}
+                isProcessing={isMissingImpactAnalysis}
+              />
+            ) : isMissingImpactAnalysis ? (
+              <ImpactAnalysis
+                impactAnalysis={undefined}
+                repositoryId={digest.repositoryId}
+                event={event ? { fileDiffs: event.fileDiffs } : undefined}
+                isProcessing={true}
+              />
             ) : null}
-            <div className="flex items-center gap-2">
-              <Avatar className="h-4 w-4">
-                <AvatarImage
-                  src={event?.actorAvatarUrl || `https://github.com/${contributor}.png`}
-                  alt={contributor}
-                />
-                <AvatarFallback className="text-[10px]">
-                  {contributor.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <a
-                href={`https://github.com/${event?.actorGithubUsername || contributor}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                @{event?.actorGithubUsername || contributor}
-              </a>
+
+            {digest.whyThisMatters ? (
+              <WhyThisMatters content={digest.whyThisMatters} />
+            ) : isMissingWhyThisMatters ? (
+              <WhyThisMatters content={""} isProcessing={true} />
+            ) : null}
+
+            {/* Footer with all metadata */}
+            <div className="border-t pt-4 space-y-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                {isCodeChange && displayRepositoryName ? (
+                  <>
+                    <Badge variant="outline" className="text-xs">
+                      {event.type === "push" ? "Code Push" : "Pull Request"} • {displayRepositoryName}
+                    </Badge>
+                    <span>•</span>
+                  </>
+                ) : isCodeChange ? (
+                  <>
+                    <Badge variant="outline" className="text-xs">
+                      {event.type === "push" ? "Code Push" : "Pull Request"}
+                    </Badge>
+                    <span>•</span>
+                  </>
+                ) : displayRepositoryName ? (
+                  <>
+                    <span className="font-medium">{displayRepositoryName}</span>
+                    <span>•</span>
+                  </>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-4 w-4">
+                    <AvatarImage
+                      src={event?.actorAvatarUrl || `https://github.com/${contributor}.png`}
+                      alt={contributor}
+                    />
+                    <AvatarFallback className="text-[10px]">
+                      {contributor.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <a
+                    href={`https://github.com/${event?.actorGithubUsername || contributor}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                  >
+                    @{event?.actorGithubUsername || contributor}
+                  </a>
+                </div>
+                {digest.metadata?.branch && (
+                  <>
+                    <span>•</span>
+                    <Badge variant="outline" className="text-xs font-mono">
+                      {digest.metadata.branch}
+                    </Badge>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {digest.metadata?.prNumber && (
+                  <>
+                    <span>PR #{digest.metadata.prNumber}</span>
+                  </>
+                )}
+                {digest.metadata?.commitCount && (
+                  <>
+                    {digest.metadata?.prNumber && <span>•</span>}
+                    <span>{digest.metadata.commitCount} commit(s)</span>
+                  </>
+                )}
+                {githubUrl && (
+                  <>
+                    {(digest.metadata?.prNumber || digest.metadata?.commitCount) && <span>•</span>}
+                    <a
+                      href={githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline flex items-center gap-1"
+                    >
+                      View on GitHub <ArrowRight className="h-3 w-3" />
+                    </a>
+                  </>
+                )}
+              </div>
             </div>
-            {digest.metadata?.branch && (
-              <>
-                <span>•</span>
-                <Badge variant="outline" className="text-xs font-mono">
-                  {digest.metadata.branch}
-                </Badge>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {digest.metadata?.prNumber && (
-              <>
-                <span>PR #{digest.metadata.prNumber}</span>
-              </>
-            )}
-            {digest.metadata?.commitCount && (
-              <>
-                {digest.metadata?.prNumber && <span>•</span>}
-                <span>{digest.metadata.commitCount} commit(s)</span>
-              </>
-            )}
-            {githubUrl && (
-              <>
-                {(digest.metadata?.prNumber || digest.metadata?.commitCount) && <span>•</span>}
-                <a
-                  href={githubUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline flex items-center gap-1"
-                >
-                  View on GitHub <ArrowRight className="h-3 w-3" />
-                </a>
-              </>
-            )}
           </div>
         </div>
       </CardContent>

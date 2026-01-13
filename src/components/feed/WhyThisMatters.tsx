@@ -10,7 +10,7 @@ export function WhyThisMatters({ content, isProcessing = false }: WhyThisMatters
   }
 
   return (
-    <div className="border-t pt-4 mt-4">
+    <div className="border-t pt-4">
       <h4 className="text-sm font-medium mb-2">Why this matters</h4>
       {content ? (
         <p className="text-sm text-muted-foreground leading-relaxed">

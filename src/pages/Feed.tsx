@@ -301,8 +301,8 @@ function MultiRepoActivityFeed({
 
   return (
     <div className="space-y-4">
-      {displayedDigests.map(({ digest, event }) => (
-        <DigestCard key={digest._id} digest={digest} event={event} />
+      {displayedDigests.map(({ digest, event }, index) => (
+        <DigestCard key={digest._id} digest={digest} event={event} index={index} />
       ))}
       {canShowMore && (
         <div className="flex justify-center pt-4">
