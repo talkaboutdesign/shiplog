@@ -865,16 +865,35 @@ export const analyzeImpactAsync = internalAction({
       return;
     }
 
-    const preferredProvider = user.apiKeys.preferredProvider || "openai";
-    const apiKey =
-      preferredProvider === "openai"
-        ? user.apiKeys.openai
-        : preferredProvider === "anthropic"
-        ? user.apiKeys.anthropic
-        : user.apiKeys.openrouter;
+    // Determine which provider to use - prefer the configured one, but fall back to any available
+    let preferredProvider = user.apiKeys.preferredProvider as "openai" | "anthropic" | "openrouter" | undefined;
+    let apiKey: string | undefined;
 
+    // First try the preferred provider
+    if (preferredProvider === "openai" && user.apiKeys.openai) {
+      apiKey = user.apiKeys.openai;
+    } else if (preferredProvider === "anthropic" && user.apiKeys.anthropic) {
+      apiKey = user.apiKeys.anthropic;
+    } else if (preferredProvider === "openrouter" && user.apiKeys.openrouter) {
+      apiKey = user.apiKeys.openrouter;
+    }
+
+    // If preferred provider doesn't have a key, fall back to any available provider
     if (!apiKey) {
-      console.error(`No ${preferredProvider} API key configured for impact analysis`);
+      if (user.apiKeys.openrouter) {
+        preferredProvider = "openrouter";
+        apiKey = user.apiKeys.openrouter;
+      } else if (user.apiKeys.openai) {
+        preferredProvider = "openai";
+        apiKey = user.apiKeys.openai;
+      } else if (user.apiKeys.anthropic) {
+        preferredProvider = "anthropic";
+        apiKey = user.apiKeys.anthropic;
+      }
+    }
+
+    if (!apiKey || !preferredProvider) {
+      console.error("No API key configured for impact analysis");
       return;
     }
 
