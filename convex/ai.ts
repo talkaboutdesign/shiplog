@@ -28,38 +28,73 @@ const DigestSchema = z.object({
   perspectives: z.array(PerspectiveSchema).max(2).optional().describe("1-2 key perspectives on this change (e.g., bugfix, ui, feature, security, performance, refactor, docs). Only include the most relevant perspectives."),
 });
 
+// Schema for intent detection (Pass 1 of two-pass analysis)
+const ChangeIntentSchema = z.object({
+  primaryIntent: z.enum(["bugfix", "feature", "refactor", "security", "performance", "chore", "docs"]),
+  claimedImprovements: z.array(z.string()).describe("What the commit claims to fix or improve"),
+  expectedBehaviorChanges: z.array(z.string()).describe("Expected changes in system behavior"),
+  riskAreas: z.array(z.string()).describe("Areas that could be affected by this change"),
+});
+
 // Simplified schema - file-level analysis, backend maps to surfaces
 const ImpactAnalysisSchema = z.object({
   affectedFiles: z.array(
     z.object({
       filePath: z.string().describe("The file path from the diff"),
       riskLevel: z.enum(["low", "medium", "high"]),
-      briefReason: z.string().describe("One-line explanation of risk"),
+      briefReason: z.string().describe("One-line explanation of NEW risk introduced"),
       confidence: z.number().min(0).max(100),
+      isImprovement: z.boolean().describe("True if this change improves the code (adds safety, fixes bugs)"),
     })
   ).max(10),
   overallRisk: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(100),
-  overallExplanation: z.string().describe("2-3 sentence senior engineer summary in markdown. Use **bold** for critical issues, `code` for function names. Never start with 'Overall Assessment:'."),
+  overallExplanation: z.string().describe("2-3 sentence senior engineer summary in markdown. Use **bold** for critical issues, `code` for function names. Focus on NEW risks, acknowledge improvements."),
+  intentValidation: z.object({
+    claimsVerified: z.boolean().describe("Whether the commit achieves what it claims"),
+    explanation: z.string().describe("Brief explanation of whether intent was achieved"),
+  }).optional(),
 });
 
-const IMPACT_ANALYSIS_SYSTEM_PROMPT = `You are a senior engineer performing rapid code review. Identify critical issues in code changes.
+const IMPACT_ANALYSIS_SYSTEM_PROMPT = `You are a senior engineer performing DIFFERENTIAL code review. Your job is to identify NEW risks introduced by changes, not flag existing patterns or improvements.
 
-Focus on these 3 categories ONLY:
-1. SECURITY: SQL injection, XSS, auth bypass, exposed secrets, CSRF
-2. CRITICAL BUGS: Null/undefined access, race conditions, type errors, logic flaws
-3. BREAKING CHANGES: API contract changes, removed functionality, incompatible modifications
+## Core Principle: Differential Analysis
+Ask "What NEW risks does this change introduce?" - NOT "What risks exist in this code?"
 
-Guidelines:
-- Be concise and specific - cite exact code when flagging issues
-- Use surface dependency counts for context but analyze only the changed code
-- Default to "low" risk if no issues found
-- High confidence (80-100) = clear evidence; Medium (50-79) = potential concern; Low (20-49) = uncertain
+## Risk Categories (only flag NEW issues)
+1. SECURITY: New vulnerabilities introduced (not existing ones being handled)
+2. CRITICAL BUGS: New code paths that could fail unexpectedly
+3. BREAKING CHANGES: Behavior changes that could break existing functionality
+
+## Pattern Recognition - DO NOT flag these as risks:
+- **Retry loops with catch blocks**: This is resilience, not silent failure
+- **Fallback returns after retries exhausted**: This is graceful degradation
+- **Error logging before returning**: This is observable failure, not silent
+- **Try-catch blocks**: This is error handling, an improvement
+- **Null checks / optional chaining**: This is defensive programming
+- **Default values**: This is safe fallback behavior
+
+## What TO flag as risks:
+- Removed error handling that existed before
+- New external API calls without error handling
+- Logic changes that alter behavior unexpectedly
+- New code paths that could throw without catching
+- Security-sensitive operations without validation
+
+## Confidence Guidelines:
+- High (80-100): Clear evidence of new risk or clear improvement
+- Medium (50-79): Potential concern, needs human review
+- Low (20-49): Uncertain, limited context
+
+## Intent Validation:
+If commit context is provided, verify the code achieves its claimed purpose.
+A change that successfully adds retry logic should be marked as an improvement, not a risk.
 
 FORMATTING RULES:
 - Never use emojis
-- Never use emdash (-) - use regular dash (-) or comma instead
-- Use markdown: **bold** for critical findings, \`code\` for function/variable names`;
+- Never use emdash - use regular dash (-) or comma instead
+- Use markdown: **bold** for critical findings, \`code\` for function/variable names
+- Acknowledge improvements, don't just list problems`;
 
 const DIGEST_SYSTEM_PROMPT = `You are a technical writer who translates GitHub activity into clear, concise summaries for non-technical stakeholders.
 
@@ -574,11 +609,30 @@ export const digestEvent = internalAction({
             patch: f.patch?.substring(0, 2500), // Truncate patches
           }));
 
+        // Extract commit context for intent-aware analysis
+        let commitMessage: string | undefined;
+        let prTitle: string | undefined;
+        let prBody: string | undefined;
+
+        if (event.type === "push") {
+          // Combine commit messages for push events
+          const commits = event.payload.commits || [];
+          commitMessage = commits.map((c: any) => c.message).join("\n").substring(0, 1000);
+        } else if (event.type === "pull_request") {
+          const pr = event.payload.pull_request;
+          prTitle = pr?.title;
+          prBody = pr?.body?.substring(0, 2000);
+          commitMessage = prTitle; // Use PR title as primary context
+        }
+
         if (truncatedFileDiffs.length > 0) {
           await ctx.scheduler.runAfter(0, internal.ai.analyzeImpactAsync, {
             digestId,
             repositoryId: event.repositoryId,
             fileDiffs: truncatedFileDiffs,
+            commitMessage,
+            prTitle,
+            prBody,
           });
         }
       }
@@ -720,8 +774,64 @@ Generate a ${perspective}-focused perspective on this change. Provide a title, s
 });
 
 /**
- * Analyze impact asynchronously - runs in background after digest is created
+ * Pass 1: Analyze change intent from commit message and PR context
+ * This runs first to understand what the change is trying to accomplish
+ */
+export const analyzeChangeIntent = internalAction({
+  args: {
+    commitMessage: v.string(),
+    prTitle: v.optional(v.string()),
+    prBody: v.optional(v.string()),
+    fileCount: v.number(),
+  },
+  handler: async (_ctx, args): Promise<z.infer<typeof ChangeIntentSchema> | null> => {
+    // For very simple changes, skip intent analysis
+    if (args.fileCount <= 2 && args.commitMessage.length < 50) {
+      return null;
+    }
+
+    // Build context from available metadata
+    const contextParts = [`Commit message: "${args.commitMessage}"`];
+    if (args.prTitle) {
+      contextParts.push(`PR title: "${args.prTitle}"`);
+    }
+    if (args.prBody && args.prBody.length < 2000) {
+      contextParts.push(`PR description: "${args.prBody}"`);
+    }
+
+    const intentPrompt = `Analyze this commit/PR to understand the developer's intent:
+
+${contextParts.join("\n")}
+
+Extract:
+1. The primary intent (bugfix, feature, refactor, security, performance, chore, docs)
+2. What improvements the author claims to make
+3. Expected behavior changes
+4. Areas that could be affected`;
+
+    try {
+      // Use a simple model for intent detection - it's a lightweight task
+      const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+      const model = openai("gpt-4o-mini");
+
+      const { object: intent } = await generateObject({
+        model,
+        schema: ChangeIntentSchema,
+        prompt: intentPrompt,
+      });
+
+      return intent;
+    } catch (error) {
+      console.error("Intent analysis failed:", error);
+      return null;
+    }
+  },
+});
+
+/**
+ * Pass 2: Analyze impact asynchronously - runs in background after digest is created
  * Uses fast model, simplified prompt, and retry logic with graceful fallback
+ * Now includes intent context for differential analysis
  */
 export const analyzeImpactAsync = internalAction({
   args: {
@@ -736,6 +846,10 @@ export const analyzeImpactAsync = internalAction({
         patch: v.optional(v.string()),
       })
     ),
+    // New: commit context for intent-aware analysis
+    commitMessage: v.optional(v.string()),
+    prTitle: v.optional(v.string()),
+    prBody: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Get repository and user to access API keys
@@ -772,6 +886,21 @@ export const analyzeImpactAsync = internalAction({
 
     // Use fast model for impact analysis
     const fastModel = getFastModel(preferredProvider, apiKey);
+
+    // Pass 1: Analyze intent from commit context (if available)
+    let changeIntent: z.infer<typeof ChangeIntentSchema> | null = null;
+    if (args.commitMessage) {
+      try {
+        changeIntent = await ctx.runAction(internal.ai.analyzeChangeIntent, {
+          commitMessage: args.commitMessage,
+          prTitle: args.prTitle,
+          prBody: args.prBody,
+          fileCount: args.fileDiffs.length,
+        });
+      } catch (error) {
+        console.error("Intent analysis failed, continuing without intent context:", error);
+      }
+    }
 
     // Get surfaces for the files
     const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
@@ -812,19 +941,45 @@ ${f.patch}
       })
       .join("\n\n");
 
-    // Simplified prompt - 3 categories only
-    const impactPrompt = `Analyze these code changes for critical issues.
+    // Build intent context section if available
+    const intentContext = changeIntent
+      ? `## Change Intent (from commit/PR)
+- **Primary intent**: ${changeIntent.primaryIntent}
+- **Claimed improvements**: ${changeIntent.claimedImprovements.join(", ") || "None specified"}
+- **Expected behavior changes**: ${changeIntent.expectedBehaviorChanges.join(", ") || "None specified"}
+
+**Important**: Verify the code achieves these claims. Mark as improvement if it does. Only flag as risk if the implementation is flawed or introduces NEW problems.
+
+`
+      : "";
+
+    // Build commit context section
+    const commitContext = args.commitMessage
+      ? `## Commit Context
+Commit message: "${args.commitMessage}"
+${args.prTitle ? `PR title: "${args.prTitle}"` : ""}
+
+`
+      : "";
+
+    // Intent-aware differential analysis prompt
+    const impactPrompt = `${intentContext}${commitContext}## Code Changes
 
 ${structuredChanges}
 
 ${args.fileDiffs.filter((f) => !f.patch).length > 0 ? `\n${args.fileDiffs.filter((f) => !f.patch).length} additional files changed without diff data.\n` : ""}
 
+## Analysis Task
+
 For each file, assess:
-- Risk level (low/medium/high)
-- Brief reason (one line)
+- Risk level (low/medium/high) - for NEW risks only
+- Brief reason - explain what NEW risk is introduced (or mark as improvement)
+- Whether this is an improvement (adds safety, fixes bugs, adds resilience)
 - Confidence (0-100)
 
-Provide overall risk level and 2-3 sentence summary.`;
+${changeIntent ? `Also validate: Does this code achieve the claimed intent? (${changeIntent.claimedImprovements.join(", ")})` : ""}
+
+Provide overall risk level and 2-3 sentence summary focusing on differential analysis.`;
 
     // Retry logic with exponential backoff
     let impactResult: z.infer<typeof ImpactAnalysisSchema> | null = null;
@@ -901,6 +1056,8 @@ Provide overall risk level and 2-3 sentence summary.`;
       filesAnalyzed: args.fileDiffs.length,
       surfacesAffected: affectedSurfaces.length,
       overallRisk: impactResult.overallRisk,
+      intentValidated: impactResult.intentValidation?.claimsVerified ?? null,
+      hadIntentContext: !!changeIntent,
     });
   },
 });
