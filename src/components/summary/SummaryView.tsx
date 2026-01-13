@@ -40,7 +40,8 @@ const periodLabels: Record<PeriodType, string> = {
 };
 
 export function SummaryView({ summary, isStreaming = false }: SummaryViewProps) {
-  const periodRange = formatPeriodRange(summary.periodStart, summary.period);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const periodRange = formatPeriodRange(summary.periodStart, summary.period, timezone);
   const periodLabel = periodLabels[summary.period];
   const periodIcon = periodEmoji[summary.period];
 

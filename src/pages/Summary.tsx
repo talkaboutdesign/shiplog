@@ -26,13 +26,14 @@ export function Summary() {
   const [processingPeriods, setProcessingPeriods] = useState<Set<PeriodType>>(new Set());
   const hasTriggeredRef = useRef<Set<string>>(new Set());
 
-  // Calculate current period start for each period
+  // Calculate current period start for each period using user's timezone
   const periodStarts = useMemo(() => {
     const now = Date.now();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     return {
-      daily: getPeriodForTimestamp(now, "daily"),
-      weekly: getPeriodForTimestamp(now, "weekly"),
-      monthly: getPeriodForTimestamp(now, "monthly"),
+      daily: getPeriodForTimestamp(now, "daily", timezone),
+      weekly: getPeriodForTimestamp(now, "weekly", timezone),
+      monthly: getPeriodForTimestamp(now, "monthly", timezone),
     };
   }, []);
 
