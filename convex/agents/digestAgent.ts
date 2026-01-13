@@ -73,7 +73,7 @@ export const generateDigest = internalAction({
     // Get model config with user's API keys
     const { model } = getUserModelConfig(user.apiKeys);
 
-    // Create agent with tools for future use
+    // Create agent with tools for tracking (thread ID only, agent not used for generation)
     const workflowContext = {
       userId: args.userId,
       repositoryId: args.repositoryId,
@@ -88,7 +88,7 @@ export const generateDigest = internalAction({
       maxSteps: 5,
     });
 
-    // Create thread for tracking
+    // Create thread for tracking (agent not used for generation, we use generateObject directly)
     const { threadId } = await agent.createThread(ctx);
 
     // Get file diffs if available
@@ -206,7 +206,7 @@ export const generateDigest = internalAction({
  * Build prompt from event data
  * Includes file diffs if available
  */
-function buildEventPrompt(event: any, fileDiffs?: any[]): string {
+export function buildEventPrompt(event: any, fileDiffs?: any[]): string {
   const { type, payload } = event;
 
   if (type === "push") {
