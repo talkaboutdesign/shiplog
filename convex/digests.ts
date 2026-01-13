@@ -713,6 +713,18 @@ export const analyzeImpactAsync = internalAction({
             overallExplanation: impactData.overallExplanation,
           },
         });
+      } else {
+        // Impact analysis was skipped (no surfaces found) - write a skipped marker
+        // so the frontend knows it's done and doesn't show skeleton
+        await ctx.runMutation(internal.digests.update, {
+          digestId: args.digestId,
+          impactAnalysis: {
+            affectedSurfaces: [],
+            overallRisk: "low" as const,
+            confidence: 0,
+            overallExplanation: "No code surfaces found for impact analysis. This change affects files that haven't been indexed yet.",
+          },
+        });
       }
     } catch (error) {
       // Log error but don't throw - impact analysis is optional
