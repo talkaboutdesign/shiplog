@@ -11,7 +11,7 @@ import type { GitHubEventType } from "../../../convex/types";
 export interface FeedFilters {
   eventType: GitHubEventType | "all";
   contributor?: string;
-  timeRange: "24h" | "7d" | "all";
+  timeRange: "24h" | "7d" | "30d";
 }
 
 interface FeedFiltersProps {
@@ -82,7 +82,7 @@ export function FeedFilters({
         <SelectContent>
           <SelectItem value="24h">Last 24 hours</SelectItem>
           <SelectItem value="7d">Last 7 days</SelectItem>
-          <SelectItem value="all">All time</SelectItem>
+          <SelectItem value="30d">Last 30 days</SelectItem>
         </SelectContent>
       </Select>
     </div>

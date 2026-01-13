@@ -202,6 +202,7 @@ export const listByRepositories = query({
   args: {
     repositoryIds: v.array(v.id("repositories")),
     limit: v.optional(v.number()),
+    cursor: v.optional(v.number()), // Timestamp cursor for pagination
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
@@ -234,10 +235,18 @@ export const listByRepositories = query({
           .take(perRepoLimit)
       )
     );
-    const flattened = allDigests.flat();
-    return flattened
+    let flattened = allDigests.flat();
+    
+    // Apply cursor filter if provided
+    if (args.cursor !== undefined) {
+      flattened = flattened.filter((d) => d.createdAt < args.cursor!);
+    }
+    
+    const sorted = flattened
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit);
+    
+    return sorted;
   },
 });
 
