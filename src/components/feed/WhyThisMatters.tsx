@@ -1,3 +1,6 @@
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+
 interface WhyThisMattersProps {
   content: string;
   isProcessing?: boolean;
@@ -11,15 +14,23 @@ export function WhyThisMatters({ content, isProcessing = false }: WhyThisMatters
 
   return (
     <div className="border-t pt-4">
-      <h4 className="text-sm font-medium mb-2">Why this matters</h4>
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-sm font-medium">Why this matters</h4>
+        {isProcessing && !content && (
+          <Badge variant="processing">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+            analyzing insights
+          </Badge>
+        )}
+      </div>
       {content ? (
         <p className="text-sm text-muted-foreground leading-relaxed">
           {content}
         </p>
       ) : (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
-          <span className="animate-pulse">Generating insights...</span>
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
         </div>
       )}
     </div>

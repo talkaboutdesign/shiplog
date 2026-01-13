@@ -114,8 +114,14 @@ export function ImpactAnalysis({
             </div>
             <Badge variant="processing">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
-              analyzing risk
+              analyzing impact
             </Badge>
+          </div>
+          
+          {/* Skeleton for overall explanation */}
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
           </div>
         </div>
 

@@ -104,8 +104,9 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
               {isProcessing && !digest.category ? (
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-lg">{digest.title}</CardTitle>
-                  <Badge variant="secondary" className="text-xs">
-                    Analyzing...
+                  <Badge variant="processing" className="text-xs">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
+                    analyzing commit
                   </Badge>
                 </div>
               ) : (
@@ -117,7 +118,7 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
               <div className="flex flex-wrap gap-2">
                 <Badge variant="processing">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-[dot-pulse_1.5s_ease-in-out_infinite]" />
-                  ANALYZING
+                  analyzing perspectives
                 </Badge>
               </div>
             ) : perspectives && perspectives.length > 0 ? (
@@ -128,7 +129,7 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
           {hasCollapsibleContent && (
             <ChevronDown
               className={cn(
-                "h-5 w-5 text-muted-foreground transition-transform duration-200 flex-shrink-0 mt-1",
+                "h-5 w-5 text-muted-foreground transition-transform duration-200 shrink-0 mt-1",
                 isExpanded && "rotate-180"
               )}
               aria-hidden="true"
