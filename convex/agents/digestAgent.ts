@@ -106,6 +106,22 @@ export const generateDigest = internalAction({
         console.error("Error fetching file diffs:", error);
         // Continue without file diffs
       }
+
+      // Store file diffs in event for later use (impact analysis, etc.)
+      if (fileDiffs && fileDiffs.length > 0) {
+        await ctx.runMutation(internal.events.updateFileDiffs, {
+          eventId: args.eventId,
+          fileDiffs: fileDiffs.map((f: any) => ({
+            filename: f.filename,
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            changes: f.changes ?? (f.additions + f.deletions),
+            patch: f.patch?.substring(0, 50000), // Limit patch size
+            previous_filename: f.previous_filename,
+          })),
+        });
+      }
     }
 
     // Check cache first (key includes repositoryId for security)
