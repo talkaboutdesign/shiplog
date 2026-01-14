@@ -182,6 +182,24 @@ export const getTodayFeed = query({
             compareUrl: v.optional(v.string()),
             branch: v.optional(v.string()),
             eventType: v.optional(v.string()),
+            fileDiffs: v.optional(
+              v.array(
+                v.object({
+                  filename: v.string(),
+                  status: v.union(
+                    v.literal("added"),
+                    v.literal("removed"),
+                    v.literal("modified"),
+                    v.literal("renamed")
+                  ),
+                  additions: v.number(),
+                  deletions: v.number(),
+                  previous_filename: v.optional(v.string()),
+                })
+              )
+            ),
+            totalAdditions: v.optional(v.number()),
+            totalDeletions: v.optional(v.number()),
           })
         ),
         whyThisMatters: v.optional(v.string()),
@@ -318,6 +336,24 @@ export const getSummaryWithDigests = query({
             compareUrl: v.optional(v.string()),
             branch: v.optional(v.string()),
             eventType: v.optional(v.string()),
+            fileDiffs: v.optional(
+              v.array(
+                v.object({
+                  filename: v.string(),
+                  status: v.union(
+                    v.literal("added"),
+                    v.literal("removed"),
+                    v.literal("modified"),
+                    v.literal("renamed")
+                  ),
+                  additions: v.number(),
+                  deletions: v.number(),
+                  previous_filename: v.optional(v.string()),
+                })
+              )
+            ),
+            totalAdditions: v.optional(v.number()),
+            totalDeletions: v.optional(v.number()),
           })
         ),
         whyThisMatters: v.optional(v.string()),
