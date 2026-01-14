@@ -3,8 +3,7 @@
 import { Routes, Route } from "react-router-dom";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { SignInButton } from "@clerk/clerk-react";
-import { Summary } from "./pages/Summary";
-import { Feed } from "./pages/Feed";
+import { ActivityTimeline } from "./pages/ActivityTimeline";
 import { GitHubCallback } from "./pages/GitHubCallback";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 import { SelectedRepoProvider } from "./hooks/useSelectedRepo";
@@ -18,8 +17,7 @@ export default function App() {
           <Routes>
             <Route element={<Layout />}>
               <Route path="/github/callback" element={<GitHubCallback />} />
-              <Route path="/feed" element={<FeedWrapper />} />
-              <Route path="/" element={<SummaryWrapper />} />
+              <Route path="/" element={<TimelineWrapper />} />
             </Route>
           </Routes>
         </SelectedRepoProvider>
@@ -31,14 +29,9 @@ export default function App() {
   );
 }
 
-function SummaryWrapper() {
+function TimelineWrapper() {
   useCurrentUser();
-  return <Summary />;
-}
-
-function FeedWrapper() {
-  useCurrentUser();
-  return <Feed />;
+  return <ActivityTimeline />;
 }
 
 function SignInForm() {

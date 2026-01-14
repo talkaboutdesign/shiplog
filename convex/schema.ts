@@ -19,6 +19,7 @@ export default defineSchema({
         ),
       })
     ),
+    lastVisitAt: v.optional(v.number()), // Track last visit for "while you were away" feature
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -172,6 +173,7 @@ export default defineSchema({
     repositoryId: v.id("repositories"),
     period: v.union(v.literal("daily"), v.literal("weekly"), v.literal("monthly")),
     periodStart: v.number(), // UTC timestamp for period start
+    periodEnd: v.optional(v.number()), // UTC timestamp for period end (NEW for timeline)
     headline: v.string(),
     accomplishments: v.string(), // Main body text
     keyFeatures: v.array(v.string()),
@@ -191,9 +193,16 @@ export default defineSchema({
         testCoverage: v.optional(v.number()),
       })
     ),
+    // Stats for quick display in timeline (NEW)
+    stats: v.optional(
+      v.object({
+        digestCount: v.number(),
+      })
+    ),
     includedDigestIds: v.array(v.id("digests")), // Tracks which digests are included
     // Streaming status for real-time updates during generation
     isStreaming: v.optional(v.boolean()),
+    generatedAt: v.optional(v.number()), // When cron generated this (NEW for timeline)
     lastUpdatedAt: v.number(),
     createdAt: v.number(),
   })

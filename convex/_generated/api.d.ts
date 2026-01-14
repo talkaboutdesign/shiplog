@@ -22,6 +22,8 @@ import type * as cache_compute from "../cache/compute.js";
 import type * as cache_digestCache from "../cache/digestCache.js";
 import type * as cache_embeddingCache from "../cache/embeddingCache.js";
 import type * as cache_impactCache from "../cache/impactCache.js";
+import type * as cronActions from "../cronActions.js";
+import type * as crons from "../crons.js";
 import type * as digests from "../digests.js";
 import type * as events from "../events.js";
 import type * as github from "../github.js";
@@ -32,6 +34,7 @@ import type * as repositories from "../repositories.js";
 import type * as security_ownership from "../security/ownership.js";
 import type * as summaries from "../summaries.js";
 import type * as summariesAi from "../summariesAi.js";
+import type * as timeline from "../timeline.js";
 import type * as types from "../types.js";
 import type * as users from "../users.js";
 
@@ -56,6 +59,8 @@ declare const fullApi: ApiFromModules<{
   "cache/digestCache": typeof cache_digestCache;
   "cache/embeddingCache": typeof cache_embeddingCache;
   "cache/impactCache": typeof cache_impactCache;
+  cronActions: typeof cronActions;
+  crons: typeof crons;
   digests: typeof digests;
   events: typeof events;
   github: typeof github;
@@ -66,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   "security/ownership": typeof security_ownership;
   summaries: typeof summaries;
   summariesAi: typeof summariesAi;
+  timeline: typeof timeline;
   types: typeof types;
   users: typeof users;
 }>;

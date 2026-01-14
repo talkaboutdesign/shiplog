@@ -1,7 +1,7 @@
 import { query, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
-import { Id, Doc } from "./_generated/dataModel";
+import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { FileDiff, Perspective } from "./types";
 
@@ -236,6 +236,31 @@ export const getById = internalQuery({
   args: { digestId: v.id("digests") },
   handler: async (ctx, args) => {
     return await ctx.db.get("digests", args.digestId);
+  },
+});
+
+/**
+ * Get digests for a repository within a time range (for cron jobs)
+ */
+export const getByRepositoryTimeRange = internalQuery({
+  args: {
+    repositoryId: v.id("repositories"),
+    startTime: v.number(),
+    endTime: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const digests = await ctx.db
+      .query("digests")
+      .withIndex("by_repository_time", (q) => q.eq("repositoryId", args.repositoryId))
+      .filter((q) =>
+        q.and(
+          q.gte(q.field("createdAt"), args.startTime),
+          q.lt(q.field("createdAt"), args.endTime)
+        )
+      )
+      .collect();
+
+    return digests;
   },
 });
 

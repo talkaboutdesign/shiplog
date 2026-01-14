@@ -3,7 +3,6 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";

@@ -313,6 +313,20 @@ export const getByIdPublic = query({
   },
 });
 
+/**
+ * List all active repositories across all users (for cron jobs)
+ */
+export const listAllActive = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    // Get all active repositories (no auth check - internal only)
+    return await ctx.db
+      .query("repositories")
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+  },
+});
+
 export const createOrUpdateRepository = internalMutation({
   args: {
     userId: v.id("users"),

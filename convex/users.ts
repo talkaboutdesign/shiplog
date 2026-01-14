@@ -75,6 +75,34 @@ export const upsert = mutation({
   },
 });
 
+/**
+ * Update user's last visit timestamp for "while you were away" feature
+ */
+export const updateLastVisit = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) {
+      return null;
+    }
+
+    await ctx.db.patch(user._id, {
+      lastVisitAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const updateApiKeys = mutation({
   args: {
     openai: v.optional(v.string()),
