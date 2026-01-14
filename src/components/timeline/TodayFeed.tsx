@@ -93,6 +93,9 @@ export function TodayFeed({ repositoryId }: TodayFeedProps) {
       <h2 className="text-lg font-semibold">Today</h2>
 
       {/* Digest items */}
+      {/* Note: Pagination (limit: 10) keeps list manageable. 
+          If allDigests exceeds 50 items after multiple "Load More" clicks, 
+          consider virtualization (e.g., @tanstack/react-virtual) for better performance. */}
       <div className="space-y-4">
         {allDigests.map((digest, index) => (
           <DigestCard
