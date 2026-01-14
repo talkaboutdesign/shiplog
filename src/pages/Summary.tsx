@@ -26,14 +26,24 @@ export function Summary() {
   const [processingPeriods, setProcessingPeriods] = useState<Set<PeriodType>>(new Set());
   const hasTriggeredRef = useRef<Set<string>>(new Set());
 
-  // Calculate current period start for each period using user's timezone
+  // Calculate current period start for each period using UTC (to match backend)
+  // Note: Backend uses UTC for periodStart, so frontend must also use UTC for queries
+  // Display formatting still uses user's timezone via formatPeriodRange
   const periodStarts = useMemo(() => {
     const now = Date.now();
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // Use UTC calculation to match backend (convex/lib/periodUtils.ts uses UTC)
+    const date = new Date(now);
     return {
-      daily: getPeriodForTimestamp(now, "daily", timezone),
-      weekly: getPeriodForTimestamp(now, "weekly", timezone),
-      monthly: getPeriodForTimestamp(now, "monthly", timezone),
+      daily: Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+      weekly: (() => {
+        const dayOfWeek = date.getUTCDay();
+        const year = date.getUTCFullYear();
+        const month = date.getUTCMonth();
+        const day = date.getUTCDate();
+        const sundayDate = new Date(Date.UTC(year, month, day - dayOfWeek));
+        return Date.UTC(sundayDate.getUTCFullYear(), sundayDate.getUTCMonth(), sundayDate.getUTCDate());
+      })(),
+      monthly: Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1),
     };
   }, []);
 

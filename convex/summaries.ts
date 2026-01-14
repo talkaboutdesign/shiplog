@@ -583,6 +583,32 @@ export const getSummaryStatus = query({
       )
       .first();
 
+    if (summary) {
+      console.log(`getSummaryStatus query returning ${args.period} summary`, {
+        summaryId: summary._id,
+        lastUpdatedAt: summary.lastUpdatedAt,
+        period: args.period,
+        queryPeriodStart: args.periodStart,
+        storedPeriodStart: summary.periodStart,
+        match: args.periodStart === summary.periodStart,
+      });
+    } else {
+      // Log when summary not found to debug periodStart mismatch
+      const allSummaries = await ctx.db
+        .query("summaries")
+        .withIndex("by_repository_period", (q) =>
+          q
+            .eq("repositoryId", args.repositoryId)
+            .eq("period", args.period)
+        )
+        .collect();
+      console.log(`getSummaryStatus query found no ${args.period} summary for periodStart: ${args.periodStart}`, {
+        period: args.period,
+        queryPeriodStart: args.periodStart,
+        availablePeriodStarts: allSummaries.map((s) => s.periodStart),
+      });
+    }
+
     // Get digests for this period
     const periodEnd = getPeriodEnd(args.periodStart, args.period);
     const allDigests = await ctx.db
