@@ -148,6 +148,7 @@ export const update = internalMutation({
     includedDigestIds: v.optional(v.array(v.id("digests"))),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
     const updateData: {
       headline?: string;
       accomplishments?: string;
@@ -157,7 +158,7 @@ export const update = internalMutation({
       includedDigestIds?: Id<"digests">[];
       lastUpdatedAt: number;
     } = {
-      lastUpdatedAt: Date.now(),
+      lastUpdatedAt: now,
     };
 
     if (args.headline !== undefined) updateData.headline = args.headline;
@@ -167,7 +168,16 @@ export const update = internalMutation({
     if (args.metrics !== undefined) updateData.metrics = args.metrics;
     if (args.includedDigestIds !== undefined) updateData.includedDigestIds = args.includedDigestIds;
 
+    console.log(`Updating summary ${args.summaryId} in database with lastUpdatedAt: ${now}`, {
+      summaryId: args.summaryId,
+      lastUpdatedAt: now,
+      fieldsToUpdate: Object.keys(updateData).filter((k) => k !== "lastUpdatedAt"),
+    });
     await ctx.db.patch("summaries", args.summaryId, updateData);
+    
+    // Verify the update
+    const updated = await ctx.db.get("summaries", args.summaryId);
+    console.log(`Summary ${args.summaryId} updated, lastUpdatedAt is now: ${updated?.lastUpdatedAt}`);
   },
 });
 
