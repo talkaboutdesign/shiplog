@@ -23,6 +23,11 @@ export function isTransientError(error: any): boolean {
     return true;
   }
 
+  // AI model errors (no response, timeout, etc.)
+  if (error.name === "AI_NoObjectGeneratedError" || error.name?.includes("AI_")) {
+    return true;
+  }
+
   // 5xx server errors (retryable)
   if (error.status >= 500 && error.status < 600) {
     return true;
