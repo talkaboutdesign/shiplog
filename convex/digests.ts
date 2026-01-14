@@ -526,7 +526,17 @@ export const generateDigest = internalAction({
     
     // Always generate at least one perspective
     if (relevantPerspectives.length === 0) {
-      relevantPerspectives.push(digestData.category as any || "refactor");
+      // Map category to perspective type (chore/security/etc map to refactor)
+      const categoryToPerspective: Record<string, "bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = {
+        bugfix: "bugfix",
+        feature: "feature",
+        security: "security",
+        performance: "performance",
+        refactor: "refactor",
+        docs: "docs",
+      };
+      const mappedPerspective = categoryToPerspective[digestData.category || ""] || "refactor";
+      relevantPerspectives.push(mappedPerspective);
     }
 
     // Determine which perspectives were already generated and which need async generation

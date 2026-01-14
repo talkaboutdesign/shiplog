@@ -8,17 +8,17 @@ export const DigestSchema = z.object({
   whyThisMatters: z.string().describe("1-2 sentence explanation of business/user impact"),
   perspectives: z.array(
     z.object({
-      perspective: z.enum(["bugfix", "ui", "feature", "security", "performance", "refactor", "docs"]),
+      perspective: z.enum(["bugfix", "ui", "feature", "security", "performance", "refactor", "docs"]).describe("Valid values: bugfix, ui, feature, security, performance, refactor, docs. DO NOT use category values like 'chore' - map those to valid perspectives."),
       title: z.string(),
       summary: z.string(),
       confidence: z.number().min(0).max(100),
     })
-  ).max(2).optional().describe("1-2 key perspectives on this change"),
+  ).max(2).optional().describe("1-2 key perspectives on this change. Valid perspective values: bugfix, ui, feature, security, performance, refactor, docs"),
 });
 
 // Perspective schema
 export const PerspectiveSchema = z.object({
-  perspective: z.enum(["bugfix", "ui", "feature", "security", "performance", "refactor", "docs"]),
+  perspective: z.enum(["bugfix", "ui", "feature", "security", "performance", "refactor", "docs"]).describe("Valid perspective types: bugfix, ui, feature, security, performance, refactor, docs. Use exactly one of these values."),
   title: z.string(),
   summary: z.string(),
   confidence: z.number().min(0).max(100),

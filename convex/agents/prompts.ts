@@ -33,7 +33,7 @@ For the category, choose the most appropriate:
 
 For whyThisMatters: Write 1-2 sentences explaining the business or user impact. This field is REQUIRED.
 
-For perspectives: Include 1-2 of the most relevant perspectives from: bugfix, ui, feature, security, performance, refactor, docs. Each perspective should have a focused title and summary from that perspective's viewpoint. Only include perspectives that are clearly relevant to this change.
+For perspectives: Include 1-2 of the most relevant perspectives. Valid perspective values are EXACTLY: bugfix, ui, feature, security, performance, refactor, docs. DO NOT use any other values. Each perspective should have a focused title and summary from that perspective's viewpoint. Only include perspectives that are clearly relevant to this change.
 
 When multiple commits are present, synthesize them into a single coherent summary that captures the overall change.
 
