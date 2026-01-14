@@ -11,7 +11,10 @@ export function Header({ actions }: HeaderProps) {
   return (
     <header className="sticky top-0 z-10 border-b bg-background p-4">
       <div className="container mx-auto flex items-center justify-between">
-        <Link to="/" className="text-xl font-bold hover:opacity-80 transition-opacity">
+        <Link
+          to="/"
+          className="text-xl font-bold hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+        >
           ShipLog
         </Link>
         <div className="flex items-center gap-2">

@@ -112,7 +112,7 @@ export function TodayFeed({ repositoryId }: TodayFeedProps) {
             variant="outline"
             aria-label="Load more activity"
           >
-            {isLoadingMore ? "Loading..." : "Load More"}
+            {isLoadingMore ? "Loading…" : "Load More"}
           </Button>
         </div>
       )}

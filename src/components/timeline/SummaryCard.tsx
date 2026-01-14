@@ -118,7 +118,7 @@ export function SummaryCard({ summary, defaultExpanded = false }: SummaryCardPro
       <div
         id={`summary-content-${summary._id}`}
         className={cn(
-          "grid transition-all duration-300 ease-in-out",
+          "grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none",
           expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
         )}
       >

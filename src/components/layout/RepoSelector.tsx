@@ -30,7 +30,7 @@ export function RepoSelector() {
     return (
       <Button variant="outline" disabled className="gap-2">
         <FolderGit className="h-4 w-4" />
-        Loading...
+        Loading…
       </Button>
     );
   }
