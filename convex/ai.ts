@@ -308,15 +308,10 @@ export const digestEvent = internalAction({
         throw new Error("Repository not found");
       }
 
-      // Fetch user and check index in parallel since they're independent
-      const [user, _indexCheck] = await Promise.all([
-        ctx.runQuery(internal.users.getById, {
-          userId: repository.userId,
-        }),
-        ctx.runAction(internal.surfaces.checkAndIndexIfNeeded, {
-          repositoryId: event.repositoryId,
-        }),
-      ]);
+      // Fetch user
+      const user = await ctx.runQuery(internal.users.getById, {
+        userId: repository.userId,
+      });
 
       if (!user) {
         throw new Error("User not found");
@@ -932,38 +927,11 @@ export const analyzeImpactAsync = internalAction({
       );
     }
 
-    // Get surfaces for the files
-    const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
-      repositoryId: args.repositoryId,
-      filePaths: args.fileDiffs.map((f) => f.filename),
-    });
-
-    if (surfaces.length === 0) {
-      console.log("No surfaces found for impact analysis - skipping");
-      return;
-    }
-
-    // Create a map of file path to surfaces for quick lookup
-    const surfacesByPath = new Map<string, Array<Doc<"codeSurfaces">>>();
-    surfaces.forEach((s: Doc<"codeSurfaces">) => {
-      if (!surfacesByPath.has(s.filePath)) {
-        surfacesByPath.set(s.filePath, []);
-      }
-      surfacesByPath.get(s.filePath)!.push(s);
-    });
-
-    // Build simplified structured changes with compact surface context
+    // Build simplified structured changes with file diffs only
     const structuredChanges = args.fileDiffs
       .filter((f) => f.patch)
       .map((f) => {
-        const fileSurfaces = surfacesByPath.get(f.filename) || [];
-        // Compact surface info: just name + dep count
-        const surfaceContext = fileSurfaces.length > 0
-          ? `Surfaces: ${fileSurfaces.map((s) => `${s.name} (${s.surfaceType}, ${s.dependencies.length} deps)`).join(", ")}`
-          : "";
-
         return `### ${f.filename} (${f.status}, +${f.additions} -${f.deletions})
-${surfaceContext}
 
 \`\`\`diff
 ${f.patch}
@@ -1058,30 +1026,11 @@ Provide overall risk level and 2-3 sentence summary focusing on differential ana
       return;
     }
 
-    // Map file paths to surface IDs
-    const affectedSurfaces = impactResult.affectedFiles
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((af: any) => {
-        const matchingSurfaces = surfaces.filter((s: Doc<"codeSurfaces">) => s.filePath === af.filePath);
-        const primarySurface = matchingSurfaces[0];
-        if (!primarySurface) {
-          return null;
-        }
-        return {
-          surfaceId: primarySurface._id,
-          surfaceName: primarySurface.name,
-          impactType: "modified" as const,
-          riskLevel: af.riskLevel,
-          confidence: af.confidence,
-        };
-      })
-      .filter((af): af is NonNullable<typeof af> => af !== null);
-
-    // Update digest with impact analysis
+    // Update digest with impact analysis (no surface mapping needed)
     await ctx.runMutation(internal.digests.update, {
       digestId: args.digestId,
       impactAnalysis: {
-        affectedSurfaces,
+        affectedSurfaces: [],
         overallRisk: impactResult.overallRisk,
         confidence: impactResult.confidence,
         overallExplanation: impactResult.overallExplanation,
@@ -1090,7 +1039,6 @@ Provide overall risk level and 2-3 sentence summary focusing on differential ana
 
     console.log(`Impact analysis completed for digest ${args.digestId}:`, {
       filesAnalyzed: args.fileDiffs.length,
-      surfacesAffected: affectedSurfaces.length,
       overallRisk: impactResult.overallRisk,
       intentValidated: impactResult.intentValidation.claimsVerified,
       hadIntentContext: !!changeIntent,

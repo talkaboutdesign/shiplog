@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "convex/react";
 import ReactMarkdown from "react-markdown";
-import { api } from "../../../convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,37 +33,12 @@ export function ImpactAnalysis({
 }: ImpactAnalysisProps) {
   const [showFiles, setShowFiles] = useState(false);
 
-  // Minimal query to get filePath for matching - only fetch what we need
-  const surfaceIds = impactAnalysis?.affectedSurfaces
-    ?.map((s) => s.surfaceId)
-    .filter((id) => id) as Id<"codeSurfaces">[] ?? [];
-
-  const surfaces = useQuery(
-    api.surfaces.getSurfacesByIds,
-    surfaceIds.length > 0 ? { surfaceIds } : "skip"
-  );
-
   // Now we can have conditional returns
   if (!impactAnalysis && !isProcessing) {
     return null;
   }
 
-  // Create map of surfaceId to filePath and riskLevel
-  const surfaceToFileMap = new Map<string, { riskLevel: "low" | "medium" | "high" }>();
-  if (surfaces && impactAnalysis?.affectedSurfaces) {
-    impactAnalysis.affectedSurfaces.forEach((surface) => {
-      if (surface.surfaceId) {
-        const surfaceDetails = surfaces.find((s) => s._id === surface.surfaceId);
-        if (surfaceDetails?.filePath) {
-          surfaceToFileMap.set(surfaceDetails.filePath, {
-            riskLevel: surface.riskLevel,
-          });
-        }
-      }
-    });
-  }
-
-  // Build unified file list from fileDiffs, enriched with risk levels
+  // Build unified file list from fileDiffs
   const allFiles: Array<{
     filename: string;
     riskLevel?: "low" | "medium" | "high";
@@ -74,10 +47,8 @@ export function ImpactAnalysis({
 
   if (event?.fileDiffs) {
     event.fileDiffs.forEach((fileDiff) => {
-      const riskInfo = surfaceToFileMap.get(fileDiff.filename);
       allFiles.push({
         filename: fileDiff.filename,
-        riskLevel: riskInfo?.riskLevel,
         status: fileDiff.status,
       });
     });

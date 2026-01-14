@@ -7,7 +7,6 @@ import { getFastModelConfig } from "./config";
 import { ImpactAnalysisSchema, ChangeIntentSchema } from "./schemas";
 import { IMPACT_ANALYSIS_SYSTEM_PROMPT } from "./prompts";
 import { getRepositoryWithOwnership } from "../security/ownership";
-import { Doc } from "../_generated/dataModel";
 import { isTransientError, logStructuredOutputError } from "./errors";
 import { z } from "zod";
 
@@ -57,17 +56,6 @@ export const analyzeImpact = internalAction({
     // Generate simple thread ID for tracking (no agent needed)
     const threadId = `impact-${args.digestId}-${Date.now()}`;
 
-    // Get surfaces for the files
-    const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
-      repositoryId: args.repositoryId,
-      filePaths: args.fileDiffs.map((f) => f.filename),
-    });
-
-    if (surfaces.length === 0) {
-      console.log("No surfaces found for impact analysis - skipping");
-      return null;
-    }
-
     // Pass 1: Analyze intent from commit context (if available)
     let changeIntent: z.infer<typeof ChangeIntentSchema> | null = null;
     if (args.commitMessage) {
@@ -95,25 +83,11 @@ Extract:
       }
     }
 
-    // Build structured changes with surface context
-    const surfacesByPath = new Map<string, Doc<"codeSurfaces">[]>();
-    surfaces.forEach((s: Doc<"codeSurfaces">) => {
-      if (!surfacesByPath.has(s.filePath)) {
-        surfacesByPath.set(s.filePath, []);
-      }
-      surfacesByPath.get(s.filePath)!.push(s);
-    });
-
+    // Build structured changes with file diffs only
     const structuredChanges = args.fileDiffs
       .filter((f) => f.patch)
       .map((f) => {
-        const fileSurfaces = surfacesByPath.get(f.filename) || [];
-        const surfaceContext = fileSurfaces.length > 0
-          ? `Surfaces: ${fileSurfaces.map((s) => `${s.name} (${s.surfaceType}, ${s.dependencies.length} deps)`).join(", ")}`
-          : "";
-
         return `### ${f.filename} (${f.status}, +${f.additions} -${f.deletions})
-${surfaceContext}
 
 \`\`\`diff
 ${f.patch?.substring(0, 2500)}

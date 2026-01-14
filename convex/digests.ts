@@ -466,12 +466,7 @@ export const generateDigest = internalAction({
       impactAnalysis: undefined,
     });
 
-    // Step 3: Check and trigger indexing if needed (non-blocking)
-    await ctx.runAction(internal.surfaces.checkAndIndexIfNeeded, {
-      repositoryId,
-    });
-
-    // Step 4: Generate digest using agent
+    // Step 3: Generate digest using agent
     // File diffs are fetched in the digest agent, which will store them for later use
     const digestResult = await ctx.runAction(
       internal.agents.digestAgent.generateDigest,
@@ -695,49 +690,14 @@ export const analyzeImpactAsync = internalAction({
       // Update digest with impact analysis if successful
       if (impactResult?.impactData) {
         const impactData = impactResult.impactData;
-        
-        // Map file paths to surface IDs
-        const surfaces = await ctx.runQuery(internal.surfaces.getSurfacesByPaths, {
-          repositoryId: args.repositoryId,
-          filePaths: impactData.affectedFiles.map((af: any) => af.filePath),
-        });
 
-        const affectedSurfaces = impactData.affectedFiles
-          .map((af: any) => {
-            const matchingSurfaces = surfaces.filter((s: Doc<"codeSurfaces">) => s.filePath === af.filePath);
-            const primarySurface = matchingSurfaces[0];
-            if (!primarySurface) {
-              return null;
-            }
-            return {
-              surfaceId: primarySurface._id,
-              surfaceName: primarySurface.name,
-              impactType: "modified" as const,
-              riskLevel: af.riskLevel,
-              confidence: af.confidence,
-            };
-          })
-          .filter((af: any): af is NonNullable<typeof af> => af !== null);
-
-        await ctx.runMutation(internal.digests.update, {
-          digestId: args.digestId,
-          impactAnalysis: {
-            affectedSurfaces,
-            overallRisk: impactData.overallRisk,
-            confidence: impactData.confidence,
-            overallExplanation: impactData.overallExplanation,
-          },
-        });
-      } else {
-        // Impact analysis was skipped (no surfaces found) - write a skipped marker
-        // so the frontend knows it's done and doesn't show skeleton
         await ctx.runMutation(internal.digests.update, {
           digestId: args.digestId,
           impactAnalysis: {
             affectedSurfaces: [],
-            overallRisk: "low" as const,
-            confidence: 0,
-            overallExplanation: "No code surfaces found for impact analysis. This change affects files that haven't been indexed yet.",
+            overallRisk: impactData.overallRisk,
+            confidence: impactData.confidence,
+            overallExplanation: impactData.overallExplanation,
           },
         });
       }
