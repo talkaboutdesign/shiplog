@@ -158,8 +158,7 @@ export function ImpactAnalysis({
 
         {/* Overall Explanation - Always visible */}
         {impactAnalysis.overallExplanation ? (
-          // Check if this is the fallback state (confidence 0, no surfaces)
-          impactAnalysis.confidence === 0 && impactAnalysis.affectedSurfaces?.length === 0 ? (
+          impactAnalysis.confidence === 0 ? (
             <div className="text-sm text-muted-foreground italic">
               {impactAnalysis.overallExplanation}
             </div>

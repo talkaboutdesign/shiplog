@@ -32,8 +32,6 @@ import type * as repositories from "../repositories.js";
 import type * as security_ownership from "../security/ownership.js";
 import type * as summaries from "../summaries.js";
 import type * as summariesAi from "../summariesAi.js";
-import type * as surfaces from "../surfaces.js";
-import type * as surfacesActions from "../surfacesActions.js";
 import type * as types from "../types.js";
 import type * as users from "../users.js";
 
@@ -68,8 +66,6 @@ declare const fullApi: ApiFromModules<{
   "security/ownership": typeof security_ownership;
   summaries: typeof summaries;
   summariesAi: typeof summariesAi;
-  surfaces: typeof surfaces;
-  surfacesActions: typeof surfacesActions;
   types: typeof types;
   users: typeof users;
 }>;

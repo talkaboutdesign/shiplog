@@ -36,24 +36,6 @@ export const create = internalMutation({
     whyThisMatters: v.optional(v.string()),
     impactAnalysis: v.optional(
       v.object({
-        affectedSurfaces: v.array(
-          v.object({
-            surfaceId: v.id("codeSurfaces"),
-            surfaceName: v.string(),
-            impactType: v.union(
-              v.literal("modified"),
-              v.literal("added"),
-              v.literal("deleted")
-            ),
-            riskLevel: v.union(
-              v.literal("low"),
-              v.literal("medium"),
-              v.literal("high")
-            ),
-            confidence: v.number(),
-            explanation: v.optional(v.string()),
-          })
-        ),
         overallRisk: v.union(
           v.literal("low"),
           v.literal("medium"),
@@ -104,24 +86,6 @@ export const update = internalMutation({
     whyThisMatters: v.optional(v.string()),
     impactAnalysis: v.optional(
       v.object({
-        affectedSurfaces: v.array(
-          v.object({
-            surfaceId: v.id("codeSurfaces"),
-            surfaceName: v.string(),
-            impactType: v.union(
-              v.literal("modified"),
-              v.literal("added"),
-              v.literal("deleted")
-            ),
-            riskLevel: v.union(
-              v.literal("low"),
-              v.literal("medium"),
-              v.literal("high")
-            ),
-            confidence: v.number(),
-            explanation: v.optional(v.string()),
-          })
-        ),
         overallRisk: v.union(
           v.literal("low"),
           v.literal("medium"),
@@ -575,14 +539,14 @@ export const generateDigest = internalAction({
       }
     }
 
-    // Step 8: Run impact analysis (if surfaces exist and file diffs available)
+    // Step 8: Run impact analysis (if file diffs available)
     // Re-fetch event to get file diffs that may have been stored by digest agent
     const updatedEvent = await ctx.runQuery(internal.events.getById, {
       eventId: args.eventId,
     });
     const updatedFileDiffs = updatedEvent?.fileDiffs;
     
-    if (repository.indexStatus === "completed" && updatedFileDiffs && updatedFileDiffs.length > 0) {
+    if (updatedFileDiffs && updatedFileDiffs.length > 0) {
       // Prepare truncated file diffs
       const truncatedFileDiffs = updatedFileDiffs
         .filter((f: any) => f.patch && f.patch.length > 0)
@@ -694,7 +658,6 @@ export const analyzeImpactAsync = internalAction({
         await ctx.runMutation(internal.digests.update, {
           digestId: args.digestId,
           impactAnalysis: {
-            affectedSurfaces: [],
             overallRisk: impactData.overallRisk,
             confidence: impactData.confidence,
             overallExplanation: impactData.overallExplanation,

@@ -30,7 +30,7 @@ bun run lint           # TypeScript + ESLint
 
 The `convex/` directory contains all backend code running on Convex:
 
-- **schema.ts** - Database schema with tables: `users`, `repositories`, `events`, `digests`, `codeSurfaces`, `surfaceImpacts`, `digestPerspectives`, `summaries`
+- **schema.ts** - Database schema with tables: `users`, `repositories`, `events`, `digests`, `digestPerspectives`, `summaries`
 - **http.ts** - HTTP endpoints for GitHub webhooks (`/github/webhook`) and OAuth callback (`/github/callback`)
 - **ai.ts** - AI digest generation using Vercel AI SDK with OpenAI/Anthropic/OpenRouter
 - **events.ts**, **digests.ts**, **repositories.ts**, **users.ts** - CRUD operations for each entity

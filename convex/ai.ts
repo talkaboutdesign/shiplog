@@ -609,7 +609,7 @@ export const digestEvent = internalAction({
 
       // 11. Schedule async impact analysis (non-blocking)
       // Impact analysis runs in background - digest shows immediately
-      if (repository.indexStatus === "completed" && fileDiffs && fileDiffs.length > 0) {
+      if (fileDiffs && fileDiffs.length > 0) {
         // Prepare truncated file diffs for the async action
         const truncatedFileDiffs = fileDiffs
           .filter((f: FileDiff) => f.patch && f.patch.length > 0)
@@ -1017,7 +1017,6 @@ Provide overall risk level and 2-3 sentence summary focusing on differential ana
       await ctx.runMutation(internal.digests.update, {
         digestId: args.digestId,
         impactAnalysis: {
-          affectedSurfaces: [],
           overallRisk: "low" as const,
           confidence: 0,
           overallExplanation: "Impact analysis unavailable for this change. Manual review recommended for significant changes.",
@@ -1030,7 +1029,6 @@ Provide overall risk level and 2-3 sentence summary focusing on differential ana
     await ctx.runMutation(internal.digests.update, {
       digestId: args.digestId,
       impactAnalysis: {
-        affectedSurfaces: [],
         overallRisk: impactResult.overallRisk,
         confidence: impactResult.confidence,
         overallExplanation: impactResult.overallExplanation,

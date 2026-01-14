@@ -131,24 +131,7 @@ export default defineSchema({
     whyThisMatters: v.optional(v.string()),
     impactAnalysis: v.optional(
       v.object({
-        affectedSurfaces: v.array(
-          v.object({
-            surfaceId: v.id("codeSurfaces"),
-            surfaceName: v.string(),
-            impactType: v.union(
-              v.literal("modified"),
-              v.literal("added"),
-              v.literal("deleted")
-            ),
-            riskLevel: v.union(
-              v.literal("low"),
-              v.literal("medium"),
-              v.literal("high")
-            ),
-            confidence: v.number(),
-            explanation: v.optional(v.string()),
-          })
-        ),
+        affectedSurfaces: v.optional(v.array(v.any())), // Deprecated - kept for backward compatibility, will be removed
         overallRisk: v.union(
           v.literal("low"),
           v.literal("medium"),
@@ -163,48 +146,6 @@ export default defineSchema({
     .index("by_repository", ["repositoryId"])
     .index("by_repository_time", ["repositoryId", "createdAt"])
     .index("by_event", ["eventId"]),
-
-  // ============ CODE SURFACES ============
-  codeSurfaces: defineTable({
-    repositoryId: v.id("repositories"),
-    filePath: v.string(),
-    surfaceType: v.union(
-      v.literal("component"),
-      v.literal("service"),
-      v.literal("utility"),
-      v.literal("hook"),
-      v.literal("type"),
-      v.literal("config"),
-      v.literal("other")
-    ),
-    name: v.string(),
-    dependencies: v.array(v.string()), // Array of file paths this surface depends on
-    exports: v.optional(v.array(v.string())), // Exported names from this file
-    lastSeenAt: v.number(),
-    indexedAt: v.number(),
-  })
-    .index("by_repository", ["repositoryId"])
-    .index("by_repository_path", ["repositoryId", "filePath"])
-    .index("by_repository_type", ["repositoryId", "surfaceType"]),
-
-  // ============ SURFACE IMPACTS ============
-  surfaceImpacts: defineTable({
-    eventId: v.id("events"),
-    surfaceId: v.id("codeSurfaces"),
-    impactType: v.union(
-      v.literal("modified"),
-      v.literal("added"),
-      v.literal("deleted")
-    ),
-    riskLevel: v.union(
-      v.literal("low"),
-      v.literal("medium"),
-      v.literal("high")
-    ),
-    confidence: v.number(), // 0-100
-  })
-    .index("by_event", ["eventId"])
-    .index("by_surface", ["surfaceId"]),
 
   // ============ DIGEST PERSPECTIVES ============
   digestPerspectives: defineTable({
