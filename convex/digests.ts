@@ -488,6 +488,77 @@ export const generateDigest = internalAction({
       metadata.branch = event.payload.ref?.replace("refs/heads/", "");
     }
 
+    // Fetch file diffs immediately (before creating digest) so they appear right away
+    // This avoids waiting for the digest agent to fetch them
+    let fileDiffs: any[] | undefined;
+    if (event.type === "push" || event.type === "pull_request") {
+      try {
+        const { getGitHubAppConfig, getFileDiffForPush, getFileDiffForPR } = await import("./github");
+        const config = getGitHubAppConfig();
+        const [owner, repo] = repository.fullName.split("/");
+
+        if (event.type === "push") {
+          const pushPayload = event.payload;
+          const base = pushPayload.before;
+          const head = pushPayload.after;
+          if (base && head) {
+            fileDiffs = await getFileDiffForPush(
+              config,
+              repository.githubInstallationId,
+              owner,
+              repo,
+              base,
+              head
+            );
+          }
+        } else if (event.type === "pull_request") {
+          const pr = event.payload.pull_request;
+          if (pr && pr.number) {
+            fileDiffs = await getFileDiffForPR(
+              config,
+              repository.githubInstallationId,
+              owner,
+              repo,
+              pr.number
+            );
+          }
+        }
+
+        // Store file diffs in event for later use (impact analysis, etc.)
+        if (fileDiffs && fileDiffs.length > 0) {
+          await ctx.runMutation(internal.events.updateFileDiffs, {
+            eventId: args.eventId,
+            fileDiffs: fileDiffs.map((f: any) => ({
+              filename: f.filename,
+              status: f.status,
+              additions: f.additions,
+              deletions: f.deletions,
+              changes: f.changes ?? (f.additions + f.deletions),
+              patch: f.patch?.substring(0, 50000), // Limit patch size
+              previous_filename: f.previous_filename,
+            })),
+          });
+
+          // Calculate totals and add to metadata immediately
+          const totalAdditions = fileDiffs.reduce((sum: number, f: any) => sum + (f.additions || 0), 0);
+          const totalDeletions = fileDiffs.reduce((sum: number, f: any) => sum + (f.deletions || 0), 0);
+          
+          metadata.fileDiffs = fileDiffs.map((f: any) => ({
+            filename: f.filename,
+            status: f.status,
+            additions: f.additions || 0,
+            deletions: f.deletions || 0,
+            previous_filename: f.previous_filename,
+          }));
+          metadata.totalAdditions = totalAdditions;
+          metadata.totalDeletions = totalDeletions;
+        }
+      } catch (error) {
+        console.error("Error fetching file diffs early:", error);
+        // Continue without file diffs - they'll be fetched later by digest agent
+      }
+    }
+
     // Create digest placeholder
     const placeholderTitle = event.type === "push" 
       ? `Push: ${metadata.commitCount || 0} commit(s)`
@@ -544,14 +615,14 @@ export const generateDigest = internalAction({
     });
 
     // Step 6: Run impact analysis (if file diffs available)
-    // Re-fetch event to get file diffs that may have been stored by digest agent
+    // Re-fetch event to get file diffs (they should already be there from earlier fetch, but check anyway)
     const updatedEvent = await ctx.runQuery(internal.events.getById, {
       eventId: args.eventId,
     });
-    const updatedFileDiffs = updatedEvent?.fileDiffs;
+    const updatedFileDiffs = updatedEvent?.fileDiffs || fileDiffs;
     
-    // Store file diffs summary in digest metadata (before event is deleted)
-    if (updatedFileDiffs && updatedFileDiffs.length > 0) {
+    // If file diffs weren't in initial metadata (e.g., fetch failed), update now
+    if (updatedFileDiffs && updatedFileDiffs.length > 0 && !metadata.fileDiffs) {
       const totalAdditions = updatedFileDiffs.reduce((sum: number, f: any) => sum + (f.additions || 0), 0);
       const totalDeletions = updatedFileDiffs.reduce((sum: number, f: any) => sum + (f.deletions || 0), 0);
       
