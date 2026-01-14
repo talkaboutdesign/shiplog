@@ -226,3 +226,66 @@ export const generateMonthlySummaries = internalAction({
     return { generated, skipped, errors };
   },
 });
+
+/**
+ * Retry failed events
+ * Runs every 15 minutes, retries events with status="failed" where nextRetryAt <= now
+ * Retries up to 3 times with exponential backoff: 1min, 5min, 15min
+ */
+export const retryFailedEvents = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    console.log("Starting retry failed events cron job");
+
+    // Get failed events ready for retry
+    const failedEvents = await ctx.runQuery(internal.events.getFailedEventsReadyForRetry, {});
+    console.log(`Found ${failedEvents.length} failed events ready for retry`);
+
+    let retried = 0;
+    let permanentlyFailed = 0;
+    let errors = 0;
+
+    for (const event of failedEvents) {
+      try {
+        const currentRetryCount = event.retryCount ?? 0;
+        
+        // After 3 failures, mark as permanently failed (don't retry)
+        if (currentRetryCount >= 3) {
+          await ctx.runMutation(internal.events.updateStatus, {
+            eventId: event._id,
+            status: "failed",
+            errorMessage: "Max retry attempts exceeded",
+          });
+          permanentlyFailed++;
+          continue;
+        }
+
+        // Calculate next retry time with exponential backoff: 1min, 5min, 15min
+        const backoffMinutes = currentRetryCount === 0 ? 1 : currentRetryCount === 1 ? 5 : 15;
+        const nextRetryAt = Date.now() + backoffMinutes * 60 * 1000;
+
+        // Reset status to pending and increment retry count
+        await ctx.runMutation(internal.events.updateStatus, {
+          eventId: event._id,
+          status: "pending",
+          retryCount: currentRetryCount + 1,
+          nextRetryAt,
+        });
+
+        // Retry digest generation
+        await ctx.scheduler.runAfter(0, internal.digests.generateDigest, {
+          eventId: event._id,
+        });
+
+        retried++;
+        console.log(`Retrying event ${event._id} (attempt ${currentRetryCount + 1}/3)`);
+      } catch (error) {
+        errors++;
+        console.error(`Error retrying event ${event._id}:`, error);
+      }
+    }
+
+    console.log(`Retry cron completed: ${retried} retried, ${permanentlyFailed} permanently failed, ${errors} errors`);
+    return { retried, permanentlyFailed, errors };
+  },
+});

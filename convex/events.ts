@@ -8,36 +8,44 @@ export const create = internalMutation({
     repositoryId: v.id("repositories"),
     githubDeliveryId: v.string(),
     type: v.string(),
-    action: v.optional(v.string()),
     payload: v.any(),
-    actorGithubUsername: v.string(),
-    actorGithubId: v.number(),
-    actorAvatarUrl: v.optional(v.string()),
     occurredAt: v.number(),
   },
   handler: async (ctx, args) => {
-    // Check for duplicate by delivery ID
-    const existing = await ctx.db
+    // Check for duplicate by delivery ID in events table
+    const existingEvent = await ctx.db
       .query("events")
       .withIndex("by_delivery_id", (q) =>
         q.eq("githubDeliveryId", args.githubDeliveryId)
       )
       .first();
 
-    if (existing) {
+    if (existingEvent) {
       // Already processed this event
-      return existing._id;
+      return existingEvent._id;
+    }
+
+    // Also check digests table for duplicates (events may have been deleted after processing)
+    const existingDigest = await ctx.db
+      .query("digests")
+      .withIndex("by_delivery_id", (q) =>
+        q.eq("githubDeliveryId", args.githubDeliveryId)
+      )
+      .first();
+
+    if (existingDigest) {
+      // Already processed - return the existing event ID if we can find it, or throw
+      // Since the event was deleted, we can't return an event ID
+      // Return null to indicate skip (caller should handle gracefully)
+      // Actually, we need to return an ID for the scheduler call, so throw an error
+      throw new Error("Event already processed (digest exists)");
     }
 
     const eventId = await ctx.db.insert("events", {
       repositoryId: args.repositoryId,
       githubDeliveryId: args.githubDeliveryId,
       type: args.type,
-      action: args.action,
       payload: args.payload,
-      actorGithubUsername: args.actorGithubUsername,
-      actorGithubId: args.actorGithubId,
-      actorAvatarUrl: args.actorAvatarUrl,
       occurredAt: args.occurredAt,
       status: "pending",
       createdAt: Date.now(),
@@ -65,15 +73,37 @@ export const updateStatus = internalMutation({
       v.literal("skipped")
     ),
     errorMessage: v.optional(v.string()),
+    retryCount: v.optional(v.number()),
+    nextRetryAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch("events", args.eventId, {
+    const update: {
+      status: "pending" | "processing" | "completed" | "failed" | "skipped";
+      errorMessage?: string;
+      processedAt?: number;
+      retryCount?: number;
+      nextRetryAt?: number;
+    } = {
       status: args.status,
-      errorMessage: args.errorMessage,
-      processedAt: args.status === "completed" || args.status === "failed" || args.status === "skipped"
-        ? Date.now()
-        : undefined,
-    });
+    };
+    
+    if (args.errorMessage !== undefined) {
+      update.errorMessage = args.errorMessage;
+    }
+    
+    if (args.status === "completed" || args.status === "failed" || args.status === "skipped") {
+      update.processedAt = Date.now();
+    }
+    
+    if (args.retryCount !== undefined) {
+      update.retryCount = args.retryCount;
+    }
+    
+    if (args.nextRetryAt !== undefined) {
+      update.nextRetryAt = args.nextRetryAt;
+    }
+    
+    await ctx.db.patch("events", args.eventId, update);
   },
 });
 
@@ -104,6 +134,15 @@ export const updateFileDiffs = internalMutation({
   },
 });
 
+export const deleteEvent = internalMutation({
+  args: {
+    eventId: v.id("events"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete("events", args.eventId);
+  },
+});
+
 export const get = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -125,6 +164,36 @@ export const getById = internalQuery({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     return await ctx.db.get("events", args.eventId);
+  },
+});
+
+/**
+ * Get failed events that are ready for retry (nextRetryAt <= now)
+ */
+export const getFailedEventsReadyForRetry = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    // Query all events with status="failed"
+    // We need to check each repository's failed events
+    const allRepos = await ctx.db.query("repositories").collect();
+    const failedEvents = [];
+    
+    for (const repo of allRepos) {
+      const repoFailedEvents = await ctx.db
+        .query("events")
+        .withIndex("by_repository_status", (q) =>
+          q.eq("repositoryId", repo._id).eq("status", "failed")
+        )
+        .filter((q) => q.or(
+          q.eq(q.field("nextRetryAt"), undefined),
+          q.lte(q.field("nextRetryAt"), now)
+        ))
+        .collect();
+      failedEvents.push(...repoFailedEvents);
+    }
+    
+    return failedEvents;
   },
 });
 

@@ -37,8 +37,6 @@ describe("digests.listByRepository", () => {
         githubDeliveryId: "delivery-1",
         type: "push",
         payload: {},
-        actorGithubUsername: "usera",
-        actorGithubId: 1,
         occurredAt: Date.now(),
         status: "completed",
         createdAt: Date.now(),
@@ -46,9 +44,11 @@ describe("digests.listByRepository", () => {
       await ctx.db.insert("digests", {
         repositoryId: repoId,
         eventId,
+        githubDeliveryId: "delivery-1",
         title: "Test Digest",
         summary: "Test summary",
         contributors: ["usera"],
+        metadata: { eventType: "push" },
         createdAt: Date.now(),
       });
       return { repoId };
@@ -160,8 +160,6 @@ describe("digests.listByRepositories", () => {
         githubDeliveryId: "delivery-a",
         type: "push",
         payload: {},
-        actorGithubUsername: "usera",
-        actorGithubId: 1,
         occurredAt: Date.now(),
         status: "completed",
         createdAt: Date.now(),
@@ -171,8 +169,6 @@ describe("digests.listByRepositories", () => {
         githubDeliveryId: "delivery-b",
         type: "push",
         payload: {},
-        actorGithubUsername: "userb",
-        actorGithubId: 2,
         occurredAt: Date.now(),
         status: "completed",
         createdAt: Date.now(),
@@ -180,17 +176,21 @@ describe("digests.listByRepositories", () => {
       await ctx.db.insert("digests", {
         repositoryId: repoIdA,
         eventId: eventIdA,
+        githubDeliveryId: "delivery-a",
         title: "Digest A",
         summary: "Summary A",
         contributors: ["usera"],
+        metadata: { eventType: "push" },
         createdAt: Date.now(),
       });
       await ctx.db.insert("digests", {
         repositoryId: repoIdB,
         eventId: eventIdB,
+        githubDeliveryId: "delivery-b",
         title: "Digest B",
         summary: "Summary B",
         contributors: ["userb"],
+        metadata: { eventType: "push" },
         createdAt: Date.now(),
       });
       return { repoIdA, repoIdB };
@@ -206,124 +206,4 @@ describe("digests.listByRepositories", () => {
   });
 });
 
-describe("digests.getByEvent", () => {
-  it("allows users to access digests from events in their own repositories", async () => {
-    const t = convexTest(schema, modules);
-    
-    const userA = t.withIdentity({ subject: "user_a_id" });
-    
-    // Create user A and their repository with event and digest
-    const { eventId } = await userA.run(async (ctx) => {
-      const userId = await ctx.db.insert("users", {
-        clerkId: "user_a_id",
-        email: "usera@example.com",
-        githubUsername: "usera",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      const repoId = await ctx.db.insert("repositories", {
-        userId,
-        githubId: 123,
-        githubInstallationId: 456,
-        name: "repo-a",
-        fullName: "usera/repo-a",
-        owner: "usera",
-        isPrivate: false,
-        isActive: true,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      const eventId = await ctx.db.insert("events", {
-        repositoryId: repoId,
-        githubDeliveryId: "delivery-1",
-        type: "push",
-        payload: {},
-        actorGithubUsername: "usera",
-        actorGithubId: 1,
-        occurredAt: Date.now(),
-        status: "completed",
-        createdAt: Date.now(),
-      });
-      await ctx.db.insert("digests", {
-        repositoryId: repoId,
-        eventId,
-        title: "Test Digest",
-        summary: "Test summary",
-        contributors: ["usera"],
-        createdAt: Date.now(),
-      });
-      return { eventId };
-    });
-    
-    // User A should be able to access digest from their own event
-    const digest = await userA.query(api.digests.getByEvent, { eventId });
-    expect(digest).toBeDefined();
-    expect(digest?.eventId).toBe(eventId);
-  });
-
-  it("rejects access to digests from events in other users' repositories", async () => {
-    const t = convexTest(schema, modules);
-    
-    const userA = t.withIdentity({ subject: "user_a_id" });
-    const userB = t.withIdentity({ subject: "user_b_id" });
-    
-    // Create user B first so they exist in the database
-    await userB.run(async (ctx) => {
-      await ctx.db.insert("users", {
-        clerkId: "user_b_id",
-        email: "userb@example.com",
-        githubUsername: "userb",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-    });
-    
-    // Create user A and their repository with event and digest
-    const { eventId } = await userA.run(async (ctx) => {
-      const userId = await ctx.db.insert("users", {
-        clerkId: "user_a_id",
-        email: "usera@example.com",
-        githubUsername: "usera",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      const repoId = await ctx.db.insert("repositories", {
-        userId,
-        githubId: 123,
-        githubInstallationId: 456,
-        name: "repo-a",
-        fullName: "usera/repo-a",
-        owner: "usera",
-        isPrivate: false,
-        isActive: true,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      const eventId = await ctx.db.insert("events", {
-        repositoryId: repoId,
-        githubDeliveryId: "delivery-1",
-        type: "push",
-        payload: {},
-        actorGithubUsername: "usera",
-        actorGithubId: 1,
-        occurredAt: Date.now(),
-        status: "completed",
-        createdAt: Date.now(),
-      });
-      await ctx.db.insert("digests", {
-        repositoryId: repoId,
-        eventId,
-        title: "Test Digest",
-        summary: "Test summary",
-        contributors: ["usera"],
-        createdAt: Date.now(),
-      });
-      return { eventId };
-    });
-    
-    // User B should not be able to access digest from User A's event
-    await expect(
-      userB.query(api.digests.getByEvent, { eventId })
-    ).rejects.toThrowError("Repository not found or unauthorized");
-  });
-});
+// getByEvent query removed - events are deleted after processing, use digest queries instead

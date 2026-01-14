@@ -344,8 +344,16 @@ export const digestEvent = internalAction({
         return;
       }
 
-      // 3. Extract metadata immediately (available synchronously from event payload)
-      const contributors = [event.actorGithubUsername];
+      // 3. Extract actor info from payload (events no longer store this)
+      let actorGithubUsername = "unknown";
+      if (event.type === "push") {
+        actorGithubUsername = event.payload.pusher?.name || event.payload.sender?.login || "unknown";
+      } else if (event.type === "pull_request") {
+        actorGithubUsername = event.payload.sender?.login || "unknown";
+      }
+      
+      // Extract metadata immediately (available synchronously from event payload)
+      const contributors = [actorGithubUsername];
       const metadata: any = {};
       
       if (event.type === "pull_request") {
@@ -369,9 +377,13 @@ export const digestEvent = internalAction({
         : "Processing event...";
 
       // 5. Create new digest
+      // CRITICAL: Use event.occurredAt (GitHub timestamp) for digest.createdAt
       const digestId = await ctx.runMutation(internal.digests.create, {
         repositoryId: event.repositoryId,
         eventId: args.eventId,
+        githubDeliveryId: event.githubDeliveryId,
+        eventType: event.type,
+        createdAt: event.occurredAt, // Use GitHub timestamp, not Date.now()
         title: placeholderTitle,
         summary: "Analyzing changes...",
         category: undefined,

@@ -3,12 +3,15 @@ import { v } from "convex/values";
 import { getCurrentUser, verifyRepositoryOwnership } from "./auth";
 import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { FileDiff, Perspective } from "./types";
+import { Perspective } from "./types";
 
 export const create = internalMutation({
   args: {
     repositoryId: v.id("repositories"),
-    eventId: v.id("events"),
+    eventId: v.optional(v.id("events")),
+    githubDeliveryId: v.string(),
+    eventType: v.string(),
+    createdAt: v.number(), // Use event.occurredAt instead of Date.now()
     title: v.string(),
     summary: v.string(),
     category: v.optional(
@@ -30,6 +33,7 @@ export const create = internalMutation({
         commitCount: v.optional(v.number()),
         compareUrl: v.optional(v.string()),
         branch: v.optional(v.string()),
+        eventType: v.optional(v.string()),
       })
     ),
     aiModel: v.optional(v.string()),
@@ -65,19 +69,26 @@ export const create = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
+    // Merge eventType into metadata
+    const metadata = args.metadata || {};
+    if (args.eventType) {
+      metadata.eventType = args.eventType;
+    }
+    
     const digestId = await ctx.db.insert("digests", {
       repositoryId: args.repositoryId,
       eventId: args.eventId,
+      githubDeliveryId: args.githubDeliveryId,
       title: args.title,
       summary: args.summary,
       category: args.category,
       contributors: args.contributors,
-      metadata: args.metadata,
+      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       aiModel: args.aiModel,
       whyThisMatters: args.whyThisMatters,
       impactAnalysis: args.impactAnalysis,
       perspectives: args.perspectives,
-      createdAt: Date.now(),
+      createdAt: args.createdAt, // Use event.occurredAt (GitHub timestamp)
     });
 
     // Summary updates are triggered by generateDigest action after digest creation
@@ -257,26 +268,6 @@ export const listByRepositories = query({
   },
 });
 
-export const getByEvent = query({
-  args: { eventId: v.id("events") },
-  handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx);
-    
-    // Get the event to check repository ownership
-    const event = await ctx.db.get("events", args.eventId);
-    if (!event) {
-      throw new Error("Event not found");
-    }
-    
-    // Verify the event belongs to a repository owned by the user
-    await verifyRepositoryOwnership(ctx, event.repositoryId, user._id);
-    
-    return await ctx.db
-      .query("digests")
-      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
-      .first();
-  },
-});
 
 export const getById = internalQuery({
   args: { digestId: v.id("digests") },
@@ -389,21 +380,6 @@ export const getPerspectivesByDigest = query({
   },
 });
 
-export const getEventByDigest = query({
-  args: { digestId: v.id("digests") },
-  handler: async (ctx, args) => {
-    const digest = await ctx.db.get("digests", args.digestId);
-    if (!digest) {
-      return null;
-    }
-
-    // Verify repository ownership
-    const user = await getCurrentUser(ctx);
-    await verifyRepositoryOwnership(ctx, digest.repositoryId, user._id);
-
-    return await ctx.db.get("events", digest.eventId);
-  },
-});
 
 /**
  * Generate digest for an event (replaces workflow)
@@ -457,8 +433,16 @@ export const generateDigest = internalAction({
       throw new Error("No API keys configured - skipping digest generation");
     }
 
+    // Extract actor info from payload (events no longer store this)
+    let actorGithubUsername = "unknown";
+    if (event.type === "push") {
+      actorGithubUsername = event.payload.pusher?.name || event.payload.sender?.login || "unknown";
+    } else if (event.type === "pull_request") {
+      actorGithubUsername = event.payload.sender?.login || "unknown";
+    }
+    
     // Extract metadata immediately
-    const contributors = [event.actorGithubUsername];
+    const contributors = [actorGithubUsername];
     const metadata: any = {};
     
     if (event.type === "pull_request") {
@@ -482,9 +466,14 @@ export const generateDigest = internalAction({
       : "Processing event...";
 
     // Step 2: Create digest placeholder
+    // CRITICAL: Use event.occurredAt (GitHub timestamp) for digest.createdAt
+    // This ensures digests reflect when the GitHub action actually occurred, not when we processed it
     const digestId = await ctx.runMutation(internal.digests.create, {
       repositoryId,
       eventId: args.eventId,
+      githubDeliveryId: event.githubDeliveryId,
+      eventType: event.type,
+      createdAt: event.occurredAt, // Use GitHub timestamp, not Date.now()
       title: placeholderTitle,
       summary: "Analyzing changes...",
       category: undefined,
@@ -575,10 +564,10 @@ export const generateDigest = internalAction({
       }
     }
 
-    // Step 9: Update event status - digest is ready
-    await ctx.runMutation(internal.events.updateStatus, {
+    // Step 9: Delete event after successful processing
+    // Events are only kept during processing or when failed (for retries)
+    await ctx.runMutation(internal.events.deleteEvent, {
       eventId: args.eventId,
-      status: "completed",
     });
 
     // Note: Summaries are generated by cron jobs after periods end, not per-digest

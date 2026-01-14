@@ -59,8 +59,6 @@ describe("Cross-user isolation", () => {
         githubDeliveryId: "delivery-a",
         type: "push",
         payload: {},
-        actorGithubUsername: "usera",
-        actorGithubId: 1,
         occurredAt: Date.now(),
         status: "completed",
         createdAt: Date.now(),
@@ -70,8 +68,6 @@ describe("Cross-user isolation", () => {
         githubDeliveryId: "delivery-b",
         type: "push",
         payload: {},
-        actorGithubUsername: "userb",
-        actorGithubId: 2,
         occurredAt: Date.now(),
         status: "completed",
         createdAt: Date.now(),
@@ -80,17 +76,21 @@ describe("Cross-user isolation", () => {
       await ctx.db.insert("digests", {
         repositoryId: repoIdA,
         eventId: eventIdA,
+        githubDeliveryId: "delivery-a",
         title: "Digest A",
         summary: "Summary A",
         contributors: ["usera"],
+        metadata: { eventType: "push" },
         createdAt: Date.now(),
       });
       await ctx.db.insert("digests", {
         repositoryId: repoIdB,
         eventId: eventIdB,
+        githubDeliveryId: "delivery-b",
         title: "Digest B",
         summary: "Summary B",
         contributors: ["userb"],
+        metadata: { eventType: "push" },
         createdAt: Date.now(),
       });
       
@@ -136,10 +136,8 @@ describe("Cross-user isolation", () => {
       userA.query(api.events.get, { eventId: eventIdB })
     ).rejects.toThrowError("Repository not found or unauthorized");
     
-    await expect(
-      userA.query(api.digests.getByEvent, { eventId: eventIdB })
-    ).rejects.toThrowError("Repository not found or unauthorized");
-    
+    // getByEvent query removed - events are deleted after processing
+
     // User B should NOT be able to access User A's data
     await expect(
       userB.query(api.events.listByRepository, { repositoryId: repoIdA })
@@ -151,10 +149,6 @@ describe("Cross-user isolation", () => {
     
     await expect(
       userB.query(api.events.get, { eventId: eventIdA })
-    ).rejects.toThrowError("Repository not found or unauthorized");
-    
-    await expect(
-      userB.query(api.digests.getByEvent, { eventId: eventIdA })
     ).rejects.toThrowError("Repository not found or unauthorized");
   });
 
@@ -211,8 +205,6 @@ describe("Cross-user isolation", () => {
         githubDeliveryId: "delivery-a",
         type: "push",
         payload: {},
-        actorGithubUsername: "usera",
-        actorGithubId: 1,
         occurredAt: Date.now(),
         status: "completed",
         createdAt: Date.now(),
@@ -222,8 +214,6 @@ describe("Cross-user isolation", () => {
         githubDeliveryId: "delivery-b",
         type: "push",
         payload: {},
-        actorGithubUsername: "userb",
-        actorGithubId: 2,
         occurredAt: Date.now(),
         status: "completed",
         createdAt: Date.now(),

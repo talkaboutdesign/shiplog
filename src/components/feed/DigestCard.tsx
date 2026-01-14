@@ -6,31 +6,28 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PerspectiveBadges } from "./PerspectiveBadges";
 import { WhyThisMatters } from "./WhyThisMatters";
 import { ImpactAnalysis } from "./ImpactAnalysis";
-import { useEvent } from "@/hooks/useEvent";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { formatDistanceToNow } from "date-fns";
 import { ArrowRight, Clock, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Digest, Event } from "../../../convex/types";
+import type { Digest } from "../../../convex/types";
 
 interface DigestCardProps {
   digest: Digest;
   repositoryFullName?: string;
-  event?: Event; // Optional event prop to avoid extra query
   index?: number; // Position in list - first 3 default to expanded
 }
 
-export function DigestCard({ digest, repositoryFullName, event: eventProp, index = 0 }: DigestCardProps) {
+export function DigestCard({ digest, repositoryFullName, index = 0 }: DigestCardProps) {
   // First 3 cards (index 0, 1, 2) are expanded by default
   const [isExpanded, setIsExpanded] = useState(index < 3);
   const contributor = digest.contributors[0] || "unknown";
   const githubUrl = digest.metadata?.prUrl || digest.metadata?.compareUrl;
   // Perspectives are now stored directly on the digest
   const perspectives = digest.perspectives;
-  // Use provided event or fetch it
-  const fetchedEvent = useEvent(digest._id);
-  const event = eventProp || fetchedEvent;
+  // Get event type from digest metadata
+  const eventType = digest.metadata?.eventType;
   // Fetch repository name if not provided
   const repository = useQuery(
     api.repositories.getByIdPublic,
@@ -54,7 +51,7 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
     (hasBasicContent && (isMissingWhyThisMatters || isMissingImpactAnalysis));
 
   // Determine event type for UI differentiation
-  const isCodeChange = event?.type === "push" || event?.type === "pull_request";
+  const isCodeChange = eventType === "push" || eventType === "pull_request";
 
   const handleToggle = () => {
     setIsExpanded(!isExpanded);
@@ -165,7 +162,6 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
                 repositoryId={digest.repositoryId}
                 repositoryFullName={displayRepositoryName}
                 digestMetadata={digest.metadata}
-                event={event ? { fileDiffs: event.fileDiffs } : undefined}
                 isProcessing={isMissingImpactAnalysis}
               />
             ) : isMissingImpactAnalysis ? (
@@ -174,7 +170,6 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
                 repositoryId={digest.repositoryId}
                 repositoryFullName={displayRepositoryName}
                 digestMetadata={digest.metadata}
-                event={event ? { fileDiffs: event.fileDiffs } : undefined}
                 isProcessing={true}
               />
             ) : null}
@@ -191,14 +186,14 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
                 {isCodeChange && displayRepositoryName ? (
                   <>
                     <Badge variant="outline" className="text-xs">
-                      {event.type === "push" ? "Code Push" : "Pull Request"} • {displayRepositoryName}
+                      {eventType === "push" ? "Code Push" : "Pull Request"} • {displayRepositoryName}
                     </Badge>
                     <span>•</span>
                   </>
                 ) : isCodeChange ? (
                   <>
                     <Badge variant="outline" className="text-xs">
-                      {event.type === "push" ? "Code Push" : "Pull Request"}
+                      {eventType === "push" ? "Code Push" : "Pull Request"}
                     </Badge>
                     <span>•</span>
                   </>
@@ -211,7 +206,7 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
                 <div className="flex items-center gap-2">
                   <Avatar className="h-4 w-4">
                     <AvatarImage
-                      src={event?.actorAvatarUrl || `https://github.com/${contributor}.png`}
+                      src={`https://github.com/${contributor}.png`}
                       alt={contributor}
                     />
                     <AvatarFallback className="text-[10px]">
@@ -219,12 +214,12 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
                     </AvatarFallback>
                   </Avatar>
                   <a
-                    href={`https://github.com/${event?.actorGithubUsername || contributor}`}
+                    href={`https://github.com/${contributor}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:underline"
                   >
-                    @{event?.actorGithubUsername || contributor}
+                    @{contributor}
                   </a>
                 </div>
                 {digest.metadata?.branch && (

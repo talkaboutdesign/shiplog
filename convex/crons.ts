@@ -27,4 +27,11 @@ crons.monthly(
   internal.cronActions.generateMonthlySummaries
 );
 
+// Retry failed events every 15 minutes
+crons.interval(
+  "retry failed events",
+  { minutes: 15 },
+  internal.cronActions.retryFailedEvents
+);
+
 export default crons;

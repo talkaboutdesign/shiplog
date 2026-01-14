@@ -61,11 +61,7 @@ export default defineSchema({
     repositoryId: v.id("repositories"),
     githubDeliveryId: v.string(),
     type: v.string(),
-    action: v.optional(v.string()),
     payload: v.any(),
-    actorGithubUsername: v.string(),
-    actorGithubId: v.number(),
-    actorAvatarUrl: v.optional(v.string()),
     occurredAt: v.number(),
     status: v.union(
       v.literal("pending"),
@@ -76,6 +72,8 @@ export default defineSchema({
     ),
     errorMessage: v.optional(v.string()),
     processedAt: v.optional(v.number()),
+    retryCount: v.optional(v.number()),
+    nextRetryAt: v.optional(v.number()),
     fileDiffs: v.optional(
       v.array(
         v.object({
@@ -104,7 +102,8 @@ export default defineSchema({
   // ============ DIGESTS ============
   digests: defineTable({
     repositoryId: v.id("repositories"),
-    eventId: v.id("events"),
+    eventId: v.optional(v.id("events")),
+    githubDeliveryId: v.string(),
     title: v.string(),
     summary: v.string(),
     category: v.optional(
@@ -126,6 +125,7 @@ export default defineSchema({
         commitCount: v.optional(v.number()),
         compareUrl: v.optional(v.string()),
         branch: v.optional(v.string()),
+        eventType: v.optional(v.string()),
       })
     ),
     aiModel: v.optional(v.string()),
@@ -164,7 +164,8 @@ export default defineSchema({
   })
     .index("by_repository", ["repositoryId"])
     .index("by_repository_time", ["repositoryId", "createdAt"])
-    .index("by_event", ["eventId"]),
+    .index("by_event", ["eventId"])
+    .index("by_delivery_id", ["githubDeliveryId"]),
 
   // ============ SUMMARIES ============
   summaries: defineTable({

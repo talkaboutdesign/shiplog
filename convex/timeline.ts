@@ -159,7 +159,7 @@ export const getTodayFeed = query({
       v.object({
         _id: v.id("digests"),
         repositoryId: v.id("repositories"),
-        eventId: v.id("events"),
+        eventId: v.optional(v.id("events")),
         title: v.string(),
         summary: v.string(),
         category: v.optional(
@@ -181,6 +181,7 @@ export const getTodayFeed = query({
             commitCount: v.optional(v.number()),
             compareUrl: v.optional(v.string()),
             branch: v.optional(v.string()),
+            eventType: v.optional(v.string()),
           })
         ),
         whyThisMatters: v.optional(v.string()),
@@ -294,7 +295,7 @@ export const getSummaryWithDigests = query({
       v.object({
         _id: v.id("digests"),
         repositoryId: v.id("repositories"),
-        eventId: v.id("events"),
+        eventId: v.optional(v.id("events")),
         title: v.string(),
         summary: v.string(),
         category: v.optional(
@@ -316,6 +317,7 @@ export const getSummaryWithDigests = query({
             commitCount: v.optional(v.number()),
             compareUrl: v.optional(v.string()),
             branch: v.optional(v.string()),
+            eventType: v.optional(v.string()),
           })
         ),
         whyThisMatters: v.optional(v.string()),

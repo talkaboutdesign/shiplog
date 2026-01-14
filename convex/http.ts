@@ -193,21 +193,6 @@ http.route({
         return new Response("Repository not active", { status: 200 }); // Return 200 to prevent GitHub retries
       }
 
-      // Extract actor info
-      let actorGithubUsername = "";
-      let actorGithubId = 0;
-      let actorAvatarUrl: string | undefined;
-
-      if (eventType === "push") {
-        actorGithubUsername = payload.pusher?.name || payload.sender?.login || "unknown";
-        actorGithubId = payload.sender?.id || 0;
-        actorAvatarUrl = payload.sender?.avatar_url;
-      } else if (eventType === "pull_request") {
-        actorGithubUsername = payload.sender?.login || "unknown";
-        actorGithubId = payload.sender?.id || 0;
-        actorAvatarUrl = payload.sender?.avatar_url;
-      }
-
       // Determine occurredAt timestamp
       let occurredAt = Date.now();
       if (eventType === "push") {
@@ -230,17 +215,23 @@ http.route({
       }
 
       // Store event
-      await ctx.runMutation(internal.events.create, {
-        repositoryId: repository._id,
-        githubDeliveryId: deliveryId,
-        type: eventType,
-        action: payload.action,
-        payload,
-        actorGithubUsername,
-        actorGithubId,
-        actorAvatarUrl,
-        occurredAt,
-      });
+      try {
+        await ctx.runMutation(internal.events.create, {
+          repositoryId: repository._id,
+          githubDeliveryId: deliveryId,
+          type: eventType,
+          payload,
+          occurredAt,
+        });
+      } catch (error) {
+        // Handle duplicate events gracefully (already processed)
+        if (error instanceof Error && error.message.includes("already processed")) {
+          console.log(`Event ${deliveryId} already processed, skipping`);
+          return new Response("Event already processed", { status: 200 });
+        }
+        // Re-throw other errors
+        throw error;
+      }
 
       return new Response("Event processed", { status: 200 });
     } catch (error) {
