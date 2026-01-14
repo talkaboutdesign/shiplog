@@ -181,11 +181,23 @@ export async function getFileDiffForPush(
   );
 
   if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.statusText}`);
+    const error: any = new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    error.status = response.status;
+    error.statusText = response.statusText;
+    // Try to get error details from response body
+    try {
+      const errorBody = await response.json();
+      if (errorBody.message) {
+        error.message = `${error.message} - ${errorBody.message}`;
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+    throw error;
   }
 
   const data = (await response.json()) as CompareResult;
-  return data.files;
+  return data.files || [];
 }
 
 // Get file diff for a PR using GitHub PR Files API
@@ -208,7 +220,19 @@ export async function getFileDiffForPR(
   );
 
   if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.statusText}`);
+    const error: any = new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    error.status = response.status;
+    error.statusText = response.statusText;
+    // Try to get error details from response body
+    try {
+      const errorBody = await response.json();
+      if (errorBody.message) {
+        error.message = `${error.message} - ${errorBody.message}`;
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+    throw error;
   }
 
   return (await response.json()) as FileDiff[];

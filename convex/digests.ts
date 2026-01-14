@@ -492,71 +492,127 @@ export const generateDigest = internalAction({
     // This avoids waiting for the digest agent to fetch them
     let fileDiffs: any[] | undefined;
     if (event.type === "push" || event.type === "pull_request") {
-      try {
-        const { getGitHubAppConfig, getFileDiffForPush, getFileDiffForPR } = await import("./github");
-        const config = getGitHubAppConfig();
-        const [owner, repo] = repository.fullName.split("/");
+      const { getGitHubAppConfig, getFileDiffForPush, getFileDiffForPR } = await import("./github");
+      const { isTransientError } = await import("./agents/errors");
+      const config = getGitHubAppConfig();
+      const [owner, repo] = repository.fullName.split("/");
 
-        if (event.type === "push") {
-          const pushPayload = event.payload;
-          const base = pushPayload.before;
-          const head = pushPayload.after;
-          if (base && head) {
-            fileDiffs = await getFileDiffForPush(
-              config,
-              repository.githubInstallationId,
-              owner,
-              repo,
-              base,
-              head
-            );
-          }
-        } else if (event.type === "pull_request") {
-          const pr = event.payload.pull_request;
-          if (pr && pr.number) {
-            fileDiffs = await getFileDiffForPR(
-              config,
-              repository.githubInstallationId,
-              owner,
-              repo,
-              pr.number
-            );
-          }
-        }
+      // Retry logic for transient errors (rate limits, network issues, etc.)
+      const maxRetries = 2;
 
-        // Store file diffs in event for later use (impact analysis, etc.)
-        if (fileDiffs && fileDiffs.length > 0) {
-          await ctx.runMutation(internal.events.updateFileDiffs, {
-            eventId: args.eventId,
-            fileDiffs: fileDiffs.map((f: any) => ({
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (event.type === "push") {
+            const pushPayload = event.payload;
+            const base = pushPayload.before;
+            const head = pushPayload.after;
+            if (base && head) {
+              fileDiffs = await getFileDiffForPush(
+                config,
+                repository.githubInstallationId,
+                owner,
+                repo,
+                base,
+                head
+              );
+            } else {
+              // Missing commit SHAs - permanent error, don't retry
+              console.warn(`Missing commit SHAs for push event ${args.eventId}: base=${base}, head=${head}`);
+              break;
+            }
+          } else if (event.type === "pull_request") {
+            const pr = event.payload.pull_request;
+            if (pr && pr.number) {
+              fileDiffs = await getFileDiffForPR(
+                config,
+                repository.githubInstallationId,
+                owner,
+                repo,
+                pr.number
+              );
+            } else {
+              // Missing PR number - permanent error, don't retry
+              console.warn(`Missing PR number for pull_request event ${args.eventId}`);
+              break;
+            }
+          }
+
+          // Success - store file diffs
+          if (fileDiffs && fileDiffs.length > 0) {
+            await ctx.runMutation(internal.events.updateFileDiffs, {
+              eventId: args.eventId,
+              fileDiffs: fileDiffs.map((f: any) => ({
+                filename: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions,
+                changes: f.changes ?? (f.additions + f.deletions),
+                patch: f.patch?.substring(0, 50000), // Limit patch size
+                previous_filename: f.previous_filename,
+              })),
+            });
+
+            // Calculate totals and add to metadata immediately
+            const totalAdditions = fileDiffs.reduce((sum: number, f: any) => sum + (f.additions || 0), 0);
+            const totalDeletions = fileDiffs.reduce((sum: number, f: any) => sum + (f.deletions || 0), 0);
+            
+            metadata.fileDiffs = fileDiffs.map((f: any) => ({
               filename: f.filename,
               status: f.status,
-              additions: f.additions,
-              deletions: f.deletions,
-              changes: f.changes ?? (f.additions + f.deletions),
-              patch: f.patch?.substring(0, 50000), // Limit patch size
+              additions: f.additions || 0,
+              deletions: f.deletions || 0,
               previous_filename: f.previous_filename,
-            })),
+            }));
+            metadata.totalAdditions = totalAdditions;
+            metadata.totalDeletions = totalDeletions;
+          }
+          
+          // Success - exit retry loop
+          break;
+        } catch (error: any) {
+          // Check if error is transient (rate limit, network, 5xx)
+          const isTransient = isTransientError(error);
+          
+          // Check for specific GitHub API errors
+          const isNotFound = error.message?.includes("404") || error.status === 404;
+          const isForbidden = error.message?.includes("403") || error.status === 403;
+          const isRateLimit = error.message?.includes("429") || error.status === 429;
+          
+          // Log error with context
+          console.error(`Error fetching file diffs (attempt ${attempt + 1}/${maxRetries + 1}) for event ${args.eventId}:`, {
+            error: error.message || String(error),
+            status: error.status,
+            isTransient,
+            isNotFound,
+            isForbidden,
+            isRateLimit,
+            eventType: event.type,
+            repository: repository.fullName,
           });
 
-          // Calculate totals and add to metadata immediately
-          const totalAdditions = fileDiffs.reduce((sum: number, f: any) => sum + (f.additions || 0), 0);
-          const totalDeletions = fileDiffs.reduce((sum: number, f: any) => sum + (f.deletions || 0), 0);
-          
-          metadata.fileDiffs = fileDiffs.map((f: any) => ({
-            filename: f.filename,
-            status: f.status,
-            additions: f.additions || 0,
-            deletions: f.deletions || 0,
-            previous_filename: f.previous_filename,
-          }));
-          metadata.totalAdditions = totalAdditions;
-          metadata.totalDeletions = totalDeletions;
+          // Permanent errors (404, 403) - don't retry
+          if (isNotFound || isForbidden) {
+            console.warn(`Permanent error fetching file diffs for event ${args.eventId}, skipping retries`);
+            break;
+          }
+
+          // Transient errors - retry with exponential backoff
+          if (isTransient && attempt < maxRetries) {
+            const backoffMs = 1000 * Math.pow(2, attempt); // 1s, 2s
+            console.log(`Retrying file diffs fetch after ${backoffMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
+            continue;
+          }
+
+          // Last attempt failed or non-transient error - give up
+          if (attempt === maxRetries) {
+            console.warn(`Failed to fetch file diffs after ${maxRetries + 1} attempts for event ${args.eventId}. Digest will continue without file diffs.`);
+          }
         }
-      } catch (error) {
-        console.error("Error fetching file diffs early:", error);
-        // Continue without file diffs - they'll be fetched later by digest agent
       }
+      
+      // Note: We continue digest generation even if file diffs fetch failed
+      // The digest agent will try again later, and digest generation doesn't require file diffs
     }
 
     // Create digest placeholder
