@@ -420,6 +420,10 @@ export const updateSummariesForDigest = internalAction({
       });
 
       if (existingSummary) {
+        console.log(`Found existing ${period} summary, updating with new digest`, {
+          summaryId: existingSummary._id,
+          digestId: args.digestId,
+        });
         // Summary exists, update it incrementally
         try {
           // Get repository to get userId
@@ -450,6 +454,7 @@ export const updateSummariesForDigest = internalAction({
           });
 
           // Update the summary in database
+          console.log(`Updating ${period} summary in database`, { summaryId: existingSummary._id });
           await ctx.runMutation(internal.summaries.update, {
             summaryId: existingSummary._id,
             headline: updatedSummary.summaryData.headline,
@@ -459,11 +464,13 @@ export const updateSummariesForDigest = internalAction({
             metrics: updatedSummary.summaryData.totalItems ? { totalItems: updatedSummary.summaryData.totalItems } : existingSummary.metrics,
             includedDigestIds: [...existingSummary.includedDigestIds, args.digestId],
           });
+          console.log(`Successfully updated ${period} summary`);
         } catch (error) {
           console.error(`Error updating ${period} summary:`, error);
           // Continue with other periods even if one fails
         }
       } else {
+        console.log(`No existing ${period} summary found, generating new one`);
         // Summary doesn't exist, generate it automatically
         try {
           await ctx.runAction(internal.summaries.generateSummaryOnDemand, {
