@@ -196,6 +196,24 @@ export const getTodayFeed = query({
             overallExplanation: v.optional(v.string()),
           })
         ),
+        perspectives: v.optional(
+          v.array(
+            v.object({
+              perspective: v.union(
+                v.literal("bugfix"),
+                v.literal("ui"),
+                v.literal("feature"),
+                v.literal("security"),
+                v.literal("performance"),
+                v.literal("refactor"),
+                v.literal("docs")
+              ),
+              title: v.string(),
+              summary: v.string(),
+              confidence: v.number(),
+            })
+          )
+        ),
         createdAt: v.number(),
       })
     ),
@@ -238,6 +256,7 @@ export const getTodayFeed = query({
       metadata: d.metadata,
       whyThisMatters: d.whyThisMatters,
       impactAnalysis: d.impactAnalysis,
+      perspectives: d.perspectives,
       createdAt: d.createdAt,
     }));
 
@@ -300,6 +319,24 @@ export const getSummaryWithDigests = query({
           })
         ),
         whyThisMatters: v.optional(v.string()),
+        perspectives: v.optional(
+          v.array(
+            v.object({
+              perspective: v.union(
+                v.literal("bugfix"),
+                v.literal("ui"),
+                v.literal("feature"),
+                v.literal("security"),
+                v.literal("performance"),
+                v.literal("refactor"),
+                v.literal("docs")
+              ),
+              title: v.string(),
+              summary: v.string(),
+              confidence: v.number(),
+            })
+          )
+        ),
         createdAt: v.number(),
       })
     ),
@@ -330,6 +367,7 @@ export const getSummaryWithDigests = query({
         contributors: d.contributors,
         metadata: d.metadata,
         whyThisMatters: d.whyThisMatters,
+        perspectives: d.perspectives,
         createdAt: d.createdAt,
       }));
 

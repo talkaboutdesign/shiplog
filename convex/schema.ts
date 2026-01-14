@@ -142,31 +142,29 @@ export default defineSchema({
         overallExplanation: v.optional(v.string()),
       })
     ),
+    perspectives: v.optional(
+      v.array(
+        v.object({
+          perspective: v.union(
+            v.literal("bugfix"),
+            v.literal("ui"),
+            v.literal("feature"),
+            v.literal("security"),
+            v.literal("performance"),
+            v.literal("refactor"),
+            v.literal("docs")
+          ),
+          title: v.string(),
+          summary: v.string(),
+          confidence: v.number(), // 0-100
+        })
+      )
+    ), // Perspectives are now stored directly on digest (no separate table needed)
     createdAt: v.number(),
   })
     .index("by_repository", ["repositoryId"])
     .index("by_repository_time", ["repositoryId", "createdAt"])
     .index("by_event", ["eventId"]),
-
-  // ============ DIGEST PERSPECTIVES ============
-  digestPerspectives: defineTable({
-    digestId: v.id("digests"),
-    perspective: v.union(
-      v.literal("bugfix"),
-      v.literal("ui"),
-      v.literal("feature"),
-      v.literal("security"),
-      v.literal("performance"),
-      v.literal("refactor"),
-      v.literal("docs")
-    ),
-    title: v.string(),
-    summary: v.string(),
-    confidence: v.number(), // 0-100
-    createdAt: v.number(),
-  })
-    .index("by_digest", ["digestId"])
-    .index("by_digest_perspective", ["digestId", "perspective"]),
 
   // ============ SUMMARIES ============
   summaries: defineTable({

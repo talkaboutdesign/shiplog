@@ -45,6 +45,24 @@ export const create = internalMutation({
         overallExplanation: v.optional(v.string()),
       })
     ),
+    perspectives: v.optional(
+      v.array(
+        v.object({
+          perspective: v.union(
+            v.literal("bugfix"),
+            v.literal("ui"),
+            v.literal("feature"),
+            v.literal("security"),
+            v.literal("performance"),
+            v.literal("refactor"),
+            v.literal("docs")
+          ),
+          title: v.string(),
+          summary: v.string(),
+          confidence: v.number(),
+        })
+      )
+    ),
   },
   handler: async (ctx, args) => {
     const digestId = await ctx.db.insert("digests", {
@@ -58,6 +76,7 @@ export const create = internalMutation({
       aiModel: args.aiModel,
       whyThisMatters: args.whyThisMatters,
       impactAnalysis: args.impactAnalysis,
+      perspectives: args.perspectives,
       createdAt: Date.now(),
     });
 
@@ -95,6 +114,24 @@ export const update = internalMutation({
         overallExplanation: v.optional(v.string()),
       })
     ),
+    perspectives: v.optional(
+      v.array(
+        v.object({
+          perspective: v.union(
+            v.literal("bugfix"),
+            v.literal("ui"),
+            v.literal("feature"),
+            v.literal("security"),
+            v.literal("performance"),
+            v.literal("refactor"),
+            v.literal("docs")
+          ),
+          title: v.string(),
+          summary: v.string(),
+          confidence: v.number(),
+        })
+      )
+    ),
     eventId: v.optional(v.id("events")),
     updateTimestamp: v.optional(v.boolean()),
   },
@@ -105,6 +142,12 @@ export const update = internalMutation({
       category?: "feature" | "bugfix" | "refactor" | "docs" | "chore" | "security";
       whyThisMatters?: string;
       impactAnalysis?: any;
+      perspectives?: Array<{
+        perspective: "bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs";
+        title: string;
+        summary: string;
+        confidence: number;
+      }>;
       eventId?: Id<"events">;
       createdAt?: number;
     } = {};
@@ -123,6 +166,9 @@ export const update = internalMutation({
     }
     if (args.impactAnalysis !== undefined) {
       update.impactAnalysis = args.impactAnalysis;
+    }
+    if (args.perspectives !== undefined) {
+      update.perspectives = args.perspectives;
     }
     if (args.eventId !== undefined) {
       update.eventId = args.eventId;
@@ -264,34 +310,10 @@ export const getByRepositoryTimeRange = internalQuery({
   },
 });
 
-export const createPerspective = internalMutation({
-  args: {
-    digestId: v.id("digests"),
-    perspective: v.union(
-      v.literal("bugfix"),
-      v.literal("ui"),
-      v.literal("feature"),
-      v.literal("security"),
-      v.literal("performance"),
-      v.literal("refactor"),
-      v.literal("docs")
-    ),
-    title: v.string(),
-    summary: v.string(),
-    confidence: v.number(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("digestPerspectives", {
-      digestId: args.digestId,
-      perspective: args.perspective,
-      title: args.title,
-      summary: args.summary,
-      confidence: args.confidence,
-      createdAt: Date.now(),
-    });
-  },
-});
-
+/**
+ * Store perspectives on digest (replaces old digestPerspectives table)
+ * Perspectives are now stored directly on digests.perspectives field
+ */
 export const createPerspectivesBatch = internalMutation({
   args: {
     digestId: v.id("digests"),
@@ -313,23 +335,29 @@ export const createPerspectivesBatch = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const ids = [];
-    for (const perspective of args.perspectives) {
-      const id = await ctx.db.insert("digestPerspectives", {
-        digestId: args.digestId,
-        perspective: perspective.perspective,
-        title: perspective.title,
-        summary: perspective.summary,
-        confidence: perspective.confidence,
-        createdAt: now,
-      });
-      ids.push(id);
-    }
-    return ids;
+    // Get existing perspectives to merge (don't overwrite)
+    const digest = await ctx.db.get(args.digestId);
+    const existingPerspectives = digest?.perspectives || [];
+    
+    // Merge new perspectives with existing ones, avoiding duplicates by perspective type
+    const existingTypes = new Set(existingPerspectives.map((p: any) => p.perspective));
+    const newPerspectives = args.perspectives.filter((p) => !existingTypes.has(p.perspective));
+    const mergedPerspectives = [...existingPerspectives, ...newPerspectives];
+    
+    // Update digest with merged perspectives
+    await ctx.db.patch(args.digestId, {
+      perspectives: mergedPerspectives,
+    });
+    
+    return args.perspectives.length;
   },
 });
 
+/**
+ * @deprecated Perspectives are now stored directly on digests.perspectives.
+ * Use digest.perspectives instead. This query is kept for backward compatibility
+ * but only returns perspectives from the digest.perspectives field.
+ */
 export const getPerspectivesByDigest = query({
   args: { digestId: v.id("digests") },
   handler: async (ctx, args) => {
@@ -342,10 +370,22 @@ export const getPerspectivesByDigest = query({
     const user = await getCurrentUser(ctx);
     await verifyRepositoryOwnership(ctx, digest.repositoryId, user._id);
 
-    return await ctx.db
-      .query("digestPerspectives")
-      .withIndex("by_digest", (q) => q.eq("digestId", args.digestId))
-      .collect();
+    // Return perspectives from digest (new format)
+    if (digest.perspectives && digest.perspectives.length > 0) {
+      // Convert to old format for backward compatibility with components that expect the old structure
+      return digest.perspectives.map((p, index) => ({
+        _id: `deprecated-${index}` as any,
+        _creationTime: digest.createdAt,
+        digestId: args.digestId,
+        perspective: p.perspective,
+        title: p.title,
+        summary: p.summary,
+        confidence: p.confidence,
+        createdAt: digest.createdAt,
+      }));
+    }
+
+    return [];
   },
 });
 
@@ -468,103 +508,23 @@ export const generateDigest = internalAction({
 
     const { digestData } = digestResult;
 
-    // Step 5: Store immediate perspectives from digest generation (if any)
-    const immediatePerspectives = digestData.perspectives || [];
-    if (immediatePerspectives.length > 0) {
-      await ctx.runMutation(internal.digests.createPerspectivesBatch, {
-        digestId,
-        perspectives: immediatePerspectives.map((p: Perspective) => ({
-          perspective: p.perspective,
-          title: p.title,
-          summary: p.summary,
-          confidence: p.confidence,
-        })),
-      });
-    }
-
-    // Step 6: Update digest with AI-generated content
+    // Step 5: Update digest with AI-generated content (title, summary, category, whyThisMatters, perspectives)
+    // Perspectives are included in the initial AI call - no async generation needed
     await ctx.runMutation(internal.digests.update, {
       digestId,
       title: digestData.title,
       summary: digestData.summary,
       category: digestData.category,
       whyThisMatters: digestData.whyThisMatters,
+      perspectives: digestData.perspectives?.map((p: Perspective) => ({
+        perspective: p.perspective,
+        title: p.title,
+        summary: p.summary,
+        confidence: p.confidence,
+      })),
     });
 
-    // Step 7: Determine which perspectives are relevant and generate in parallel
-    const relevantPerspectives: Array<"bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = [];
-    
-    if (digestData.category === "bugfix") relevantPerspectives.push("bugfix");
-    if (digestData.category === "feature") relevantPerspectives.push("feature");
-    
-    // Check file paths for UI components (if fileDiffs available)
-    // Re-fetch event to get file diffs
-    const eventWithDiffs = await ctx.runQuery(internal.events.getById, {
-      eventId: args.eventId,
-    });
-    const eventFileDiffs = eventWithDiffs?.fileDiffs;
-    
-    if (eventFileDiffs?.some((f: FileDiff) => f.filename.match(/\.(tsx|jsx)$/) || f.filename.includes("component"))) {
-      relevantPerspectives.push("ui");
-    }
-    
-    // Always generate at least one perspective
-    if (relevantPerspectives.length === 0) {
-      // Map category to perspective type (chore/security/etc map to refactor)
-      const categoryToPerspective: Record<string, "bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = {
-        bugfix: "bugfix",
-        feature: "feature",
-        security: "security",
-        performance: "performance",
-        refactor: "refactor",
-        docs: "docs",
-      };
-      const mappedPerspective = categoryToPerspective[digestData.category || ""] || "refactor";
-      relevantPerspectives.push(mappedPerspective);
-    }
-
-    // Determine which perspectives were already generated and which need async generation
-    const immediatePerspectiveTypes = new Set(immediatePerspectives.map((p: Perspective) => p.perspective));
-    const perspectivesToGenerateAsync = relevantPerspectives
-      .filter(p => !immediatePerspectiveTypes.has(p))
-      .slice(0, 3); // Limit to 3 total perspectives
-
-    // Generate additional perspectives in parallel
-    if (perspectivesToGenerateAsync.length > 0) {
-      const perspectivePromises = perspectivesToGenerateAsync.map((perspective) =>
-        ctx.runAction(
-          internal.agents.perspectiveAgent.generatePerspective,
-          {
-            digestId,
-            repositoryId,
-            userId,
-            perspective,
-          }
-        )
-      );
-
-      const perspectiveResults = await Promise.all(perspectivePromises);
-      
-      // Store successful perspectives
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const validPerspectives = perspectiveResults
-        .filter((r: any) => r?.perspectiveData)
-        .map((r: any) => r.perspectiveData);
-
-      if (validPerspectives.length > 0) {
-        await ctx.runMutation(internal.digests.createPerspectivesBatch, {
-          digestId,
-          perspectives: validPerspectives.map((p: Perspective) => ({
-            perspective: p.perspective,
-            title: p.title,
-            summary: p.summary,
-            confidence: p.confidence,
-          })),
-        });
-      }
-    }
-
-    // Step 8: Run impact analysis (if file diffs available)
+    // Step 6: Run impact analysis (if file diffs available)
     // Re-fetch event to get file diffs that may have been stored by digest agent
     const updatedEvent = await ctx.runQuery(internal.events.getById, {
       eventId: args.eventId,

@@ -1,14 +1,19 @@
 import { Badge } from "@/components/ui/badge";
-import type { Doc } from "../../../convex/_generated/dataModel";
 
-interface PerspectiveBadgesProps {
-  perspectives: Doc<"digestPerspectives">[];
+type PerspectiveType = "bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs";
+
+interface Perspective {
+  perspective: PerspectiveType;
+  title: string;
+  summary: string;
+  confidence: number;
 }
 
-const perspectiveLabels: Record<
-  Doc<"digestPerspectives">["perspective"],
-  string
-> = {
+interface PerspectiveBadgesProps {
+  perspectives: Perspective[] | undefined;
+}
+
+const perspectiveLabels: Record<PerspectiveType, string> = {
   bugfix: "BUGFIX",
   ui: "UI",
   feature: "FEATURE",
@@ -19,14 +24,14 @@ const perspectiveLabels: Record<
 };
 
 export function PerspectiveBadges({ perspectives }: PerspectiveBadgesProps) {
-  if (perspectives.length === 0) {
+  if (!perspectives || perspectives.length === 0) {
     return null;
   }
 
   return (
     <div className="flex flex-wrap gap-2">
-      {perspectives.map((perspective) => (
-        <Badge key={perspective._id} variant={perspective.perspective}>
+      {perspectives.map((perspective, index) => (
+        <Badge key={`${perspective.perspective}-${index}`} variant={perspective.perspective}>
           {perspectiveLabels[perspective.perspective]}
         </Badge>
       ))}

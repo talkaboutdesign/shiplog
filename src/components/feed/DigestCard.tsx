@@ -6,7 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PerspectiveBadges } from "./PerspectiveBadges";
 import { WhyThisMatters } from "./WhyThisMatters";
 import { ImpactAnalysis } from "./ImpactAnalysis";
-import { usePerspectives } from "@/hooks/usePerspectives";
 import { useEvent } from "@/hooks/useEvent";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -27,7 +26,8 @@ export function DigestCard({ digest, repositoryFullName, event: eventProp, index
   const [isExpanded, setIsExpanded] = useState(index < 3);
   const contributor = digest.contributors[0] || "unknown";
   const githubUrl = digest.metadata?.prUrl || digest.metadata?.compareUrl;
-  const perspectives = usePerspectives(digest._id);
+  // Perspectives are now stored directly on the digest
+  const perspectives = digest.perspectives;
   // Use provided event or fetch it
   const fetchedEvent = useEvent(digest._id);
   const event = eventProp || fetchedEvent;

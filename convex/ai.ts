@@ -26,7 +26,7 @@ const DigestSchema = z.object({
   summary: z.string().describe("2-3 sentence plain English explanation"),
   category: z.enum(["feature", "bugfix", "refactor", "docs", "chore", "security"]),
   whyThisMatters: z.string().describe("1-2 sentence explanation of business/user impact"),
-  perspectives: z.array(PerspectiveSchema).max(2).optional().describe("1-2 key perspectives on this change (e.g., bugfix, ui, feature, security, performance, refactor, docs). Only include the most relevant perspectives."),
+  perspectives: z.array(PerspectiveSchema).min(1).max(2).describe("1-2 key perspectives on this change (e.g., bugfix, ui, feature, security, performance, refactor, docs). REQUIRED - always include at least 1 perspective. Choose the most relevant perspectives."),
 });
 
 // Schema for intent detection (Pass 1 of two-pass analysis)
@@ -106,7 +106,7 @@ REQUIRED JSON FIELDS (use these exact field names):
 - "summary": 2-3 sentence explanation
 - "category": One of: "feature", "bugfix", "refactor", "docs", "chore", "security"
 - "whyThisMatters": 1-2 sentence explanation of business/user impact (REQUIRED - do NOT use "impact" as the field name)
-- "perspectives": Optional array of 1-2 key perspectives (max 2). Each perspective should have: perspective type, title, summary, and confidence (0-100).
+- "perspectives": REQUIRED array of 1-2 key perspectives (max 2). Always include at least 1 perspective. Each perspective should have: perspective type, title, summary, and confidence (0-100).
 
 Your summaries should:
 - Lead with WHAT changed and WHY it matters (business impact)
@@ -130,7 +130,7 @@ For the category, choose the most appropriate:
 
 For whyThisMatters: Write 1-2 sentences explaining the business or user impact. This field is REQUIRED.
 
-For perspectives: Include 1-2 of the most relevant perspectives from: bugfix, ui, feature, security, performance, refactor, docs. Each perspective should have a focused title and summary from that perspective's viewpoint. Only include perspectives that are clearly relevant to this change.
+For perspectives: ALWAYS include 1-2 of the most relevant perspectives from: bugfix, ui, feature, security, performance, refactor, docs. This field is REQUIRED - always include at least 1 perspective. Each perspective should have a focused title and summary from that perspective's viewpoint. Choose the most relevant perspectives for this change.
 
 When multiple commits are present, synthesize them into a single coherent summary that captures the overall change.
 
@@ -475,11 +475,31 @@ export const digestEvent = internalAction({
           if (titleMatch && categoryMatch && summaryMatch) {
             const category = categoryMatch[1].toLowerCase();
             if (["feature", "bugfix", "refactor", "docs", "chore", "security"].includes(category)) {
+              // Map category to a perspective type for fallback
+              const categoryToPerspective: Record<string, "bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = {
+                bugfix: "bugfix",
+                feature: "feature",
+                security: "security",
+                performance: "performance",
+                refactor: "refactor",
+                docs: "docs",
+                chore: "refactor",
+              };
+              const perspectiveType = categoryToPerspective[category] || "refactor";
+              
               return {
                 title: titleMatch[1].trim(),
                 summary: summaryMatch[1].trim(),
                 category: category as any,
                 whyThisMatters: whyMatch?.[1]?.trim() || summaryMatch[1].trim(),
+                perspectives: [
+                  {
+                    perspective: perspectiveType,
+                    title: titleMatch[1].trim(),
+                    summary: summaryMatch[1].trim(),
+                    confidence: 70, // Lower confidence for fallback parsing
+                  },
+                ],
               };
             }
           }
@@ -543,70 +563,23 @@ export const digestEvent = internalAction({
         throw new Error("Failed to generate digest object after all retries");
       }
 
-      // 8. Store immediate perspectives from the digest generation (if any)
-      const immediatePerspectives = object.perspectives || [];
-      if (immediatePerspectives.length > 0) {
-        await ctx.runMutation(internal.digests.createPerspectivesBatch, {
-          digestId,
-          perspectives: immediatePerspectives.map((p) => ({
-            perspective: p.perspective,
-            title: p.title,
-            summary: p.summary,
-            confidence: p.confidence,
-          })),
-        });
-      }
-
-      // 9. Update digest with AI-generated content (title, summary, category, whyThisMatters)
+      // 8. Update digest with AI-generated content (title, summary, category, whyThisMatters, perspectives)
+      // Perspectives are included in the initial AI call - no async generation needed
       await ctx.runMutation(internal.digests.update, {
         digestId,
         title: object.title,
         summary: object.summary,
         category: object.category,
         whyThisMatters: object.whyThisMatters,
+        perspectives: object.perspectives?.map((p) => ({
+          perspective: p.perspective,
+          title: p.title,
+          summary: p.summary,
+          confidence: p.confidence,
+        })),
       });
 
-      // 10. Determine which perspectives are relevant and which still need to be generated
-      const relevantPerspectives: Array<"bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = [];
-      
-      if (object.category === "bugfix") relevantPerspectives.push("bugfix");
-      if (object.category === "feature") relevantPerspectives.push("feature");
-      
-      // Check file paths for UI components
-      if (fileDiffs?.some((f: FileDiff) => f.filename.match(/\.(tsx|jsx)$/) || f.filename.includes("component"))) {
-        relevantPerspectives.push("ui");
-      }
-      
-      // Always generate at least one perspective
-      if (relevantPerspectives.length === 0) {
-        // Map category to perspective type (chore/security/etc map to refactor)
-        const categoryToPerspective: Record<string, "bugfix" | "ui" | "feature" | "security" | "performance" | "refactor" | "docs"> = {
-          bugfix: "bugfix",
-          feature: "feature",
-          security: "security",
-          performance: "performance",
-          refactor: "refactor",
-          docs: "docs",
-        };
-        const mappedPerspective = categoryToPerspective[object.category || ""] || "refactor";
-        relevantPerspectives.push(mappedPerspective);
-      }
-
-      // Determine which perspectives were already generated and which need async generation
-      const immediatePerspectiveTypes = new Set(immediatePerspectives.map(p => p.perspective));
-      const perspectivesToGenerateAsync = relevantPerspectives
-        .filter(p => !immediatePerspectiveTypes.has(p))
-        .slice(0, 3); // Limit to 3 total perspectives
-
-      // Queue async generation of additional perspectives (if any needed)
-      if (perspectivesToGenerateAsync.length > 0) {
-        await ctx.scheduler.runAfter(0, internal.ai.generateAdditionalPerspectives, {
-          digestId,
-          perspectives: perspectivesToGenerateAsync,
-        });
-      }
-
-      // 11. Schedule async impact analysis (non-blocking)
+      // 9. Schedule async impact analysis (non-blocking)
       // Impact analysis runs in background - digest shows immediately
       if (fileDiffs && fileDiffs.length > 0) {
         // Prepare truncated file diffs for the async action
@@ -664,124 +637,6 @@ export const digestEvent = internalAction({
           error instanceof Error ? error.message : "Unknown error",
       });
       throw error;
-    }
-  },
-});
-
-/**
- * Generate additional perspectives asynchronously using the digest summary
- * This is much faster than re-processing the full event since it uses the already-generated summary
- */
-export const generateAdditionalPerspectives = internalAction({
-  args: {
-    digestId: v.id("digests"),
-    perspectives: v.array(
-      v.union(
-        v.literal("bugfix"),
-        v.literal("ui"),
-        v.literal("feature"),
-        v.literal("security"),
-        v.literal("performance"),
-        v.literal("refactor"),
-        v.literal("docs")
-      )
-    ),
-  },
-  handler: async (ctx, args) => {
-    // Fetch digest to get summary and context
-    const digest = await ctx.runQuery(internal.digests.getById, {
-      digestId: args.digestId,
-    });
-
-    if (!digest) {
-      console.error("Digest not found for perspective generation");
-      return;
-    }
-
-    // Get repository and user to access API keys
-    const repository = await ctx.runQuery(internal.repositories.getById, {
-      repositoryId: digest.repositoryId,
-    });
-
-    if (!repository) {
-      console.error("Repository not found for perspective generation");
-      return;
-    }
-
-    const user = await ctx.runQuery(internal.users.getById, {
-      userId: repository.userId,
-    });
-
-    if (!user || !user.apiKeys) {
-      console.error("User or API keys not found for perspective generation");
-      return;
-    }
-
-    const preferredProvider = user.apiKeys.preferredProvider || "openai";
-    const apiKey =
-      preferredProvider === "openai"
-        ? user.apiKeys.openai
-        : preferredProvider === "anthropic"
-        ? user.apiKeys.anthropic
-        : user.apiKeys.openrouter;
-
-    if (!apiKey) {
-      console.error(`No ${preferredProvider} API key configured for perspective generation`);
-      return;
-    }
-
-    const modelName = preferredProvider === "openrouter" ? user.apiKeys.openrouterModel : undefined;
-    const model = getModel(preferredProvider, apiKey, modelName);
-
-    // Generate perspectives in parallel using the digest summary
-    const perspectivePromises = args.perspectives.map(async (perspective) => {
-      try {
-        // Use simplified prompt based on digest summary instead of full event
-        const perspectivePrompt = `Based on this code change summary, analyze it from a ${perspective} perspective:
-
-Title: ${digest.title}
-Summary: ${digest.summary}
-Category: ${digest.category || "unknown"}
-Why this matters: ${digest.whyThisMatters || "Not specified"}
-
-Generate a ${perspective}-focused perspective on this change. Provide a title, summary, and confidence score (0-100).`;
-
-        const { object: persp } = await generateObject({
-          model,
-          schema: PerspectiveSchema,
-          prompt: perspectivePrompt,
-        });
-
-        return {
-          perspective,
-          title: persp.title,
-          summary: persp.summary,
-          confidence: persp.confidence,
-        };
-      } catch (error) {
-        console.error(`Error generating ${perspective} perspective asynchronously:`, error);
-        return null;
-      }
-    });
-
-    // Wait for all perspectives to complete
-    const results = await Promise.all(perspectivePromises);
-
-    // Filter out null results and store valid perspectives
-    const validPerspectives = results.filter(
-      (p): p is NonNullable<typeof p> => p !== null
-    );
-
-    if (validPerspectives.length > 0) {
-      await ctx.runMutation(internal.digests.createPerspectivesBatch, {
-        digestId: args.digestId,
-        perspectives: validPerspectives.map((p) => ({
-          perspective: p.perspective,
-          title: p.title,
-          summary: p.summary,
-          confidence: p.confidence,
-        })),
-      });
     }
   },
 });
