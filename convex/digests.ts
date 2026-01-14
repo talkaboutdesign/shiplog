@@ -34,6 +34,24 @@ export const create = internalMutation({
         compareUrl: v.optional(v.string()),
         branch: v.optional(v.string()),
         eventType: v.optional(v.string()),
+        fileDiffs: v.optional(
+          v.array(
+            v.object({
+              filename: v.string(),
+              status: v.union(
+                v.literal("added"),
+                v.literal("removed"),
+                v.literal("modified"),
+                v.literal("renamed")
+              ),
+              additions: v.number(),
+              deletions: v.number(),
+              previous_filename: v.optional(v.string()),
+            })
+          )
+        ),
+        totalAdditions: v.optional(v.number()),
+        totalDeletions: v.optional(v.number()),
       })
     ),
     aiModel: v.optional(v.string()),
@@ -190,6 +208,18 @@ export const update = internalMutation({
     }
 
     await ctx.db.patch("digests", args.digestId, update);
+  },
+});
+
+export const updateMetadata = internalMutation({
+  args: {
+    digestId: v.id("digests"),
+    metadata: v.any(), // Use v.any() since metadata structure is complex and optional
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch("digests", args.digestId, {
+      metadata: args.metadata,
+    });
   },
 });
 
@@ -519,6 +549,35 @@ export const generateDigest = internalAction({
       eventId: args.eventId,
     });
     const updatedFileDiffs = updatedEvent?.fileDiffs;
+    
+    // Store file diffs summary in digest metadata (before event is deleted)
+    if (updatedFileDiffs && updatedFileDiffs.length > 0) {
+      const totalAdditions = updatedFileDiffs.reduce((sum: number, f: any) => sum + (f.additions || 0), 0);
+      const totalDeletions = updatedFileDiffs.reduce((sum: number, f: any) => sum + (f.deletions || 0), 0);
+      
+      // Store file list (without patches) and totals in metadata
+      const fileDiffsSummary = updatedFileDiffs.map((f: any) => ({
+        filename: f.filename,
+        status: f.status,
+        additions: f.additions || 0,
+        deletions: f.deletions || 0,
+        previous_filename: f.previous_filename,
+      }));
+      
+      // Get current digest to merge metadata
+      const currentDigest = await ctx.runQuery(internal.digests.getById, { digestId });
+      const updatedMetadata = {
+        ...(currentDigest?.metadata || {}),
+        fileDiffs: fileDiffsSummary,
+        totalAdditions,
+        totalDeletions,
+      };
+      
+      await ctx.runMutation(internal.digests.updateMetadata, {
+        digestId,
+        metadata: updatedMetadata,
+      });
+    }
     
     if (updatedFileDiffs && updatedFileDiffs.length > 0) {
       // Prepare truncated file diffs

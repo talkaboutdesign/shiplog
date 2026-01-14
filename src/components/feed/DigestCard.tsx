@@ -9,7 +9,7 @@ import { ImpactAnalysis } from "./ImpactAnalysis";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowRight, Clock, ChevronDown } from "lucide-react";
+import { ArrowRight, Clock, ChevronDown, GitBranch, FileText, Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Digest } from "../../../convex/types";
 
@@ -22,12 +22,17 @@ interface DigestCardProps {
 export function DigestCard({ digest, repositoryFullName, index = 0 }: DigestCardProps) {
   // First 3 cards (index 0, 1, 2) are expanded by default
   const [isExpanded, setIsExpanded] = useState(index < 3);
+  const [isFilesExpanded, setIsFilesExpanded] = useState(false);
   const contributor = digest.contributors[0] || "unknown";
   const githubUrl = digest.metadata?.prUrl || digest.metadata?.compareUrl;
   // Perspectives are now stored directly on the digest
   const perspectives = digest.perspectives;
   // Get event type from digest metadata
   const eventType = digest.metadata?.eventType;
+  // Get file diffs from metadata
+  const fileDiffs = digest.metadata?.fileDiffs || [];
+  const totalAdditions = digest.metadata?.totalAdditions || 0;
+  const totalDeletions = digest.metadata?.totalDeletions || 0;
   // Fetch repository name if not provided
   const repository = useQuery(
     api.repositories.getByIdPublic,
@@ -66,7 +71,7 @@ export function DigestCard({ digest, repositoryFullName, index = 0 }: DigestCard
 
   // Check if there's collapsible content to show
   const hasCollapsibleContent = digest.impactAnalysis || digest.whyThisMatters ||
-    isMissingImpactAnalysis || isMissingWhyThisMatters || githubUrl;
+    isMissingImpactAnalysis || isMissingWhyThisMatters || githubUrl || fileDiffs.length > 0;
 
   return (
     <Card className="gap-4 py-5">
@@ -180,20 +185,103 @@ export function DigestCard({ digest, repositoryFullName, index = 0 }: DigestCard
               <WhyThisMatters content={""} isProcessing={true} />
             ) : null}
 
+            {/* File changes section */}
+            {fileDiffs.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <h4 className="text-sm font-medium">Files changed</h4>
+                    <span className="text-xs text-muted-foreground">
+                      ({fileDiffs.length} {fileDiffs.length === 1 ? "file" : "files"})
+                    </span>
+                  </div>
+                  {(totalAdditions > 0 || totalDeletions > 0) && (
+                    <div className="flex items-center gap-2 text-xs font-mono">
+                      <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                        <Plus className="h-3 w-3" />
+                        {totalAdditions}
+                      </span>
+                      <span className="text-red-600 dark:text-red-400 flex items-center gap-1">
+                        <Minus className="h-3 w-3" />
+                        {totalDeletions}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {fileDiffs.length > 0 && (
+                  <button
+                    onClick={() => setIsFilesExpanded(!isFilesExpanded)}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-3 w-3 transition-transform duration-200",
+                        isFilesExpanded && "rotate-180"
+                      )}
+                    />
+                    {isFilesExpanded ? "Hide" : "Show"} files
+                  </button>
+                )}
+                {isFilesExpanded && (
+                  <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
+                    {fileDiffs.map((file: any, idx: number) => {
+                      const statusColors = {
+                        added: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
+                        removed: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
+                        modified: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
+                        renamed: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
+                      };
+                      const statusLabels = {
+                        added: "A",
+                        removed: "D",
+                        modified: "M",
+                        renamed: "R",
+                      };
+                      return (
+                        <div
+                          key={idx}
+                          className={cn(
+                            "flex items-center gap-2 px-2 py-1 rounded text-xs border",
+                            statusColors[file.status as keyof typeof statusColors] || statusColors.modified
+                          )}
+                        >
+                          <span className="font-mono text-[10px] font-semibold shrink-0">
+                            {statusLabels[file.status as keyof typeof statusLabels] || "?"}
+                          </span>
+                          <span className="truncate flex-1 font-mono">{file.filename}</span>
+                          {(file.additions > 0 || file.deletions > 0) && (
+                            <span className="shrink-0 font-mono text-xs flex items-center gap-1">
+                              {file.additions > 0 && (
+                                <span className="text-green-600 dark:text-green-400">+{file.additions}</span>
+                              )}
+                              {file.deletions > 0 && (
+                                <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Footer with all metadata */}
             <div className="border-t pt-4 space-y-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                 {isCodeChange && displayRepositoryName ? (
                   <>
                     <Badge variant="outline" className="text-xs">
-                      {eventType === "push" ? "Code Push" : "Pull Request"} • {displayRepositoryName}
+                      {eventType === "push" ? "Commit" : "Pull Request"} • {displayRepositoryName}
                     </Badge>
                     <span>•</span>
                   </>
                 ) : isCodeChange ? (
                   <>
                     <Badge variant="outline" className="text-xs">
-                      {eventType === "push" ? "Code Push" : "Pull Request"}
+                      {eventType === "push" ? "Commit" : "Pull Request"}
                     </Badge>
                     <span>•</span>
                   </>
@@ -225,13 +313,14 @@ export function DigestCard({ digest, repositoryFullName, index = 0 }: DigestCard
                 {digest.metadata?.branch && (
                   <>
                     <span>•</span>
-                    <Badge variant="outline" className="text-xs font-mono">
+                    <Badge variant="outline" className="text-xs font-mono flex items-center gap-1">
+                      <GitBranch className="h-3 w-3" />
                       {digest.metadata.branch}
                     </Badge>
                   </>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                 {digest.metadata?.prNumber && (
                   <>
                     <span>PR #{digest.metadata.prNumber}</span>
@@ -243,9 +332,19 @@ export function DigestCard({ digest, repositoryFullName, index = 0 }: DigestCard
                     <span>{digest.metadata.commitCount} commit(s)</span>
                   </>
                 )}
-                {githubUrl && (
+                {(totalAdditions > 0 || totalDeletions > 0) && (
                   <>
                     {(digest.metadata?.prNumber || digest.metadata?.commitCount) && <span>•</span>}
+                    <span className="font-mono">
+                      <span className="text-green-600 dark:text-green-400">+{totalAdditions}</span>
+                      {" "}
+                      <span className="text-red-600 dark:text-red-400">-{totalDeletions}</span>
+                    </span>
+                  </>
+                )}
+                {githubUrl && (
+                  <>
+                    {(digest.metadata?.prNumber || digest.metadata?.commitCount || totalAdditions > 0 || totalDeletions > 0) && <span>•</span>}
                     <a
                       href={githubUrl}
                       target="_blank"
